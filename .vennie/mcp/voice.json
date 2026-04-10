@@ -1,0 +1,11 @@
+{
+  "name": "vennie-voice",
+  "description": "Writing voice training — analyses writing samples, builds voice profile, generates content that sounds like the user",
+  "server": {
+    "command": "python3",
+    "args": ["core/mcp/voice_server.py"],
+    "env": {
+      "VAULT_PATH": "${workspaceFolder}"
+    }
+  }
+}

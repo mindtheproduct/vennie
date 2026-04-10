@@ -1,0 +1,55 @@
+# Vennie Profile — generated during onboarding
+onboarded: false
+onboarded_at: null
+
+# Identity
+name: ""
+email: ""
+email_domain: ""  # MANDATORY — used for team detection
+linkedin_url: ""
+
+# Career
+role: ""
+career_level: ""  # junior|mid|senior|lead|director|vp|c-suite
+company: ""
+company_size: ""  # startup|scaling|enterprise|large_enterprise
+years_in_product: null
+current_tenure_months: null
+
+# Product Philosophy (evolves over time)
+philosophy_confidence: 0.0  # 0-1, increases with observations
+
+# AI Adoption
+ai_level: ""  # novice|intermediate|advanced|expert
+ai_tools: []  # list of AI tools they use
+
+# Communication Preferences
+communication:
+  formality: professional_casual
+  directness: balanced
+  coaching_style: collaborative  # encouraging|collaborative|challenging
+  detail_level: balanced  # concise|balanced|comprehensive
+
+# Voice Training
+voice:
+  trained: false
+  confidence: 0.0
+  samples_analysed: 0
+
+# Connected Tools
+connected_tools: []
+
+# Telemetry
+telemetry:
+  enabled: true
+  company_hash: null  # SHA256 of email_domain
+  opted_out_at: null
+
+# Features
+persona_marketplace: true
+news_enabled: true
+changelog_enabled: true
+
+# Timestamps
+created_at: null
+last_session: null

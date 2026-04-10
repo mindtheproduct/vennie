@@ -1,0 +1,11 @@
+{
+  "name": "vennie-changelog",
+  "description": "Changelog and update management — tracks Vennie versions, notifies of updates, manages migration between versions",
+  "server": {
+    "command": "python3",
+    "args": ["core/mcp/changelog_server.py"],
+    "env": {
+      "VAULT_PATH": "${workspaceFolder}"
+    }
+  }
+}

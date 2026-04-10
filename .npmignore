@@ -1,0 +1,50 @@
+# Vault data (user-generated, not part of the package)
+00-Inbox/
+01-Goals/
+02-Focus/
+03-Decisions/
+04-Projects/
+05-People/
+06-Evidence/
+07-Brand/
+08-Resources/
+System/
+
+# Development
+.git/
+.github/
+.claude/
+node_modules/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment (contains API keys)
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test/coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Python virtualenvs
+venv/
+.venv/
+
+# Lock files
+package-lock.json

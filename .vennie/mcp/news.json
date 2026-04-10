@@ -1,0 +1,11 @@
+{
+  "name": "vennie-news",
+  "description": "Product news briefing — curated daily digest of product management news, AI developments, and industry trends relevant to the user",
+  "server": {
+    "command": "python3",
+    "args": ["core/mcp/news_server.py"],
+    "env": {
+      "VAULT_PATH": "${workspaceFolder}"
+    }
+  }
+}

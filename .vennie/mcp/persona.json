@@ -1,0 +1,11 @@
+{
+  "name": "vennie-persona",
+  "description": "CPO persona marketplace — loads expert product leader personas for sparring, frameworks, and strategic thinking",
+  "server": {
+    "command": "python3",
+    "args": ["core/mcp/persona_server.py"],
+    "env": {
+      "VAULT_PATH": "${workspaceFolder}"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "vennie-onboarding",
+  "description": "Manages the onboarding flow — session state, step validation, profile generation, and vault initialization",
+  "server": {
+    "command": "python3",
+    "args": ["core/mcp/onboarding_server.py"],
+    "env": {
+      "VAULT_PATH": "${workspaceFolder}"
+    }
+  }
+}

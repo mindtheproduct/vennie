@@ -1,0 +1,55 @@
+{
+  "name": "vennie",
+  "version": "1.0.0",
+  "description": "Your AI product operating system — by Mind the Product",
+  "bin": {
+    "vennie": "./bin/vennie.js"
+  },
+  "scripts": {
+    "start": "node bin/vennie.js",
+    "install-deps": "pip install mcp pyyaml",
+    "postinstall": "node bin/postinstall.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "core/mcp/*.py",
+    "core/paths.py",
+    "vault-template/",
+    ".vennie/",
+    "VENNIE.md",
+    "LICENSE",
+    "README.md"
+  ],
+  "keywords": [
+    "product-management",
+    "ai",
+    "agent",
+    "career",
+    "coaching",
+    "claude",
+    "pm",
+    "product-manager",
+    "mind-the-product",
+    "ai-native",
+    "career-coaching",
+    "competitive-intelligence"
+  ],
+  "author": "Mind the Product",
+  "license": "CC-BY-NC-4.0",
+  "homepage": "https://vennie.ai",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mindtheproduct/vennie"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
+    "@modelcontextprotocol/sdk": "^1.27.0",
+    "ink": "^3.2.0",
+    "ink-text-input": "^4.0.1",
+    "react": "^18.3.1"
+  }
+}

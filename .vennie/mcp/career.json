@@ -1,0 +1,11 @@
+{
+  "name": "vennie-career",
+  "description": "Career coaching engine — trajectory analysis, evidence capture, brag sheet generation, promotion readiness, and market positioning",
+  "server": {
+    "command": "python3",
+    "args": ["core/mcp/career_server.py"],
+    "env": {
+      "VAULT_PATH": "${workspaceFolder}"
+    }
+  }
+}

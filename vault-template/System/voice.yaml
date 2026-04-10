@@ -1,0 +1,39 @@
+# Writing Voice Profile — trained from your actual writing
+# Run /voice train to begin, improves passively over time
+
+trained: false
+confidence: 0.0
+samples_analysed: 0
+last_trained: null
+
+# Voice characteristics (populated during training)
+sentence_length: null  # short|short_to_medium|medium|long
+vocabulary_level: null  # accessible|moderate|sophisticated|technical
+tone: null  # casual|conversational|conversational_authoritative|formal
+humor: null  # none|dry_occasional|frequent|sardonic
+structure: null  # story_first|framework_first|data_first|question_first
+
+# Punctuation & formatting quirks
+punctuation_quirks: []
+# e.g., ["uses_dashes_liberally", "minimal_exclamation_marks", "em_dash_over_semicolon"]
+
+# Opening patterns
+opening_patterns: []
+# e.g., ["starts_with_observation", "rarely_starts_with_I"]
+
+# Patterns to NEVER use (anti-patterns detected from user's edits)
+avoided_patterns:
+  - "excited to announce"
+  - "I'm thrilled"
+  - "here's the thing"
+  - "at the end of the day"
+  - "let me unpack"
+  - "deep dive"
+  - "game changer"
+  - "synergy"
+  - "leverage"
+  - "circle back"
+
+# Signature moves (what makes your writing distinctly yours)
+signature_moves: []
+# e.g., ["concrete_numbers_over_vague", "contrarian_framing", "ending_with_question"]

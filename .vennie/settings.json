@@ -1,0 +1,63 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .vennie/hooks/session-start.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .vennie/hooks/news-check.cjs"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .vennie/hooks/persona-injector.cjs"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .vennie/hooks/voice-learner.cjs"
+          },
+          {
+            "type": "command",
+            "command": "node .vennie/hooks/decision-capture.cjs"
+          },
+          {
+            "type": "command",
+            "command": "node .vennie/hooks/evidence-capture.cjs"
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .vennie/hooks/telemetry.cjs"
+          }
+        ]
+      }
+    ]
+  }
+}

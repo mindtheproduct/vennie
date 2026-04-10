@@ -1,0 +1,11 @@
+{
+  "name": "vennie-network",
+  "description": "Professional network management — relationship tracking, meeting history, stakeholder mapping, and networking recommendations",
+  "server": {
+    "command": "python3",
+    "args": ["core/mcp/network_server.py"],
+    "env": {
+      "VAULT_PATH": "${workspaceFolder}"
+    }
+  }
+}

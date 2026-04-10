@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Vennie vault state (generated at runtime)
+System/.vennie-state.db
+System/.onboarding-session.json
+System/.telemetry-queue.json
+System/.voice-training-queue.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# Python virtual environments
+venv/
+.venv/
+env/
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# npm
+.npm
+package-lock.json

@@ -1,0 +1,11 @@
+{
+  "name": "vennie-work",
+  "description": "Work management — tasks, priorities, quarter goals, meeting notes, person pages, project tracking, and daily/weekly planning",
+  "server": {
+    "command": "python3",
+    "args": ["core/mcp/work_server.py"],
+    "env": {
+      "VAULT_PATH": "${workspaceFolder}"
+    }
+  }
+}

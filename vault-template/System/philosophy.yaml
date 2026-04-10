@@ -1,0 +1,21 @@
+# Product Philosophy — evolves as Vennie observes your decisions
+# Updated automatically during coaching and reviews
+# Confidence increases from 0.0 (new) to 1.0 (well-understood)
+
+decision_style: null  # data_driven|data_informed_intuition|intuition_led
+risk_tolerance: null  # low|moderate|moderate_high|high
+craft_vs_speed: null  # craft_first|balanced|leans_speed|speed_first
+leadership_style: null  # directive|collaborative|collaborative_with_edge|servant
+stakeholder_approach: null  # consensus|informed_captain|autonomous
+user_empathy: null  # deep_researcher|balanced|metrics_proxy
+
+# Observed patterns (filled by Vennie over time)
+observed_strengths: []
+observed_blind_spots: []
+decision_patterns: []  # e.g., "tends to deprioritise tech debt"
+growth_edges: []  # areas of active development
+
+# Confidence tracking
+overall_confidence: 0.0
+last_updated: null
+observations_count: 0

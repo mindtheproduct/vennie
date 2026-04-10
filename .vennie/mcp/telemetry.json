@@ -1,0 +1,11 @@
+{
+  "name": "vennie-telemetry",
+  "description": "Anonymous usage telemetry — tracks feature adoption for product improvement. Company-hashed, no PII. User can opt out anytime.",
+  "server": {
+    "command": "python3",
+    "args": ["core/mcp/telemetry_server.py"],
+    "env": {
+      "VAULT_PATH": "${workspaceFolder}"
+    }
+  }
+}
