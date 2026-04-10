@@ -11,10 +11,9 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
+from mcp.server.fastmcp import FastMCP
 
-server = Server("vennie-voice")
+server = FastMCP("vennie-voice")
 
 VAULT_PATH = Path(os.environ.get("VAULT_PATH", os.path.expanduser("~/Vennie")))
 VOICE_PATH = VAULT_PATH / "System" / "voice.yaml"
@@ -413,11 +412,5 @@ async def generate_style_guide() -> dict:
     }
 
 
-async def main():
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(read_stream, write_stream, server.create_initialization_options())
-
-
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    server.run()

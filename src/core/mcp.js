@@ -92,9 +92,13 @@ async function startMCPServers(vaultPath) {
     servers.clear();
   }
 
-  const { renderSystem } = require('./render.js');
-  if (servers.size > 0) {
-    renderSystem(`${servers.size} MCP server${servers.size > 1 ? 's' : ''} connected (${allTools.length} tools)`);
+  try {
+    const { renderSystem } = require('../cli/render.js');
+    if (servers.size > 0) {
+      renderSystem(`${servers.size} MCP server${servers.size > 1 ? 's' : ''} connected (${allTools.length} tools)`);
+    }
+  } catch {
+    // Desktop mode — no CLI render available, skip terminal output
   }
 
   return { tools: allTools, callTool, shutdown };

@@ -1,0 +1,61 @@
+appId: ai.vennie.desktop
+productName: Vennie
+copyright: Copyright (c) 2026 Mind the Product
+
+directories:
+  output: dist-electron
+
+files:
+  - src/core/**/*
+  - src/desktop/main/**/*
+  - src/desktop/preload.js
+  - src/desktop/renderer/dist/**/*
+  - src/cli/**/*
+  - core/**/*
+  - bin/**/*
+  - .vennie/**/*
+  - vault-template/**/*
+  - package.json
+  - VENNIE.md
+  - LICENSE
+
+mac:
+  category: public.app-category.productivity
+  icon: build/icon.icns
+  target:
+    - target: dmg
+      arch:
+        - universal
+    - target: zip
+      arch:
+        - universal
+  hardenedRuntime: true
+  gatekeeperAssess: false
+
+dmg:
+  backgroundColor: "#0f0f1a"
+  window:
+    width: 540
+    height: 380
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+
+linux:
+  target:
+    - target: AppImage
+    - target: deb
+  category: Office
+
+publish:
+  provider: github
+  owner: mindtheproduct
+  repo: vennie

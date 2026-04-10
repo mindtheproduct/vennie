@@ -96,6 +96,7 @@ ${c.bold}Usage:${c.reset}
   ${c.green}vennie init${c.reset}         Create a new vault and run onboarding
   ${c.green}vennie status${c.reset}       Quick status check
   ${c.green}vennie update${c.reset}       Check for and apply updates
+  ${c.green}vennie desktop${c.reset}      Launch the desktop app
   ${c.green}vennie doctor${c.reset}       Health check (dependencies, MCP servers, hooks)
   ${c.green}vennie help${c.reset}         Show this help message
 
@@ -273,7 +274,7 @@ function cmdInit() {
     catch { return '0.1.0'; }
   })();
 
-  const { startInkApp } = require('../src/app.js');
+  const { startInkApp } = require('../src/cli/app.js');
   startInkApp(vaultPath, version);
 }
 
@@ -298,7 +299,7 @@ function cmdStart() {
     catch { return '0.1.0'; }
   })();
 
-  const { startInkApp } = require('../src/app.js');
+  const { startInkApp } = require('../src/cli/app.js');
   startInkApp(vaultPath, version);
 }
 
@@ -516,6 +517,36 @@ function cmdDoctor() {
   console.log();
 }
 
+function cmdDesktop() {
+  log.banner('Vennie Desktop');
+
+  let electronPath;
+  try {
+    electronPath = require('electron');
+  } catch {
+    log.error('Electron not installed.');
+    log.info(`Install desktop dependencies: ${c.green}npm install${c.reset} in the Vennie directory`);
+    process.exit(1);
+  }
+
+  const mainPath = path.join(VENNIE_ROOT, 'src', 'desktop', 'main', 'index.js');
+  if (!fs.existsSync(mainPath)) {
+    log.error('Desktop app not found. Make sure you have the full Vennie installation.');
+    process.exit(1);
+  }
+
+  log.info('Launching desktop app...');
+  const child = spawn(electronPath, [mainPath], {
+    stdio: 'inherit',
+    env: { ...process.env },
+    detached: true,
+  });
+  child.unref();
+
+  // Don't wait for the Electron process — let it run independently
+  setTimeout(() => process.exit(0), 500);
+}
+
 function cmdUpdate() {
   log.banner('Vennie Update');
 
@@ -562,6 +593,10 @@ function main() {
       break;
     case 'start':
       cmdStart();
+      break;
+    case 'desktop':
+    case '--desktop':
+      cmdDesktop();
       break;
     case 'status':
       cmdStatus();
