@@ -135,6 +135,7 @@ async function startOneServer(name, config, vaultPath) {
     args,
     env,
     cwd,
+    stderr: 'pipe', // Suppress noisy MCP SDK logging
   });
 
   const client = new Client({
