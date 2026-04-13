@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const { getOverdueCommitments, getOpenCommitments } = require('./commitments');
 
 // -- Morning Brief ------------------------------------------------------------
 // Zero-prompt value on startup: scans the vault and produces a structured
@@ -349,6 +350,51 @@ function buildOvernightChanges(vaultPath) {
   }
 }
 
+/**
+ * Commitments: shows overdue and due-today commitments.
+ */
+function buildCommitments(vaultPath) {
+  try {
+    const todayStr = today();
+    const overdue = getOverdueCommitments(vaultPath);
+    const open = getOpenCommitments(vaultPath);
+    const dueToday = open.filter(c => c.due === todayStr);
+
+    const lines = [];
+    const urgent = [...overdue, ...dueToday];
+
+    if (urgent.length === 0) {
+      return { title: 'Commitments', content: 'No overdue or due-today commitments.' };
+    }
+
+    if (overdue.length > 0) {
+      lines.push(`${overdue.length} overdue:`);
+      for (const c of overdue.slice(0, 3)) {
+        const personBit = c.person ? ` (${c.person})` : '';
+        const ownerBit = c.owner === 'other' ? `${c.person || '?'} owes you: ` : '';
+        lines.push(`  - ${ownerBit}${c.text.slice(0, 50)}${c.owner === 'self' ? personBit : ''}`);
+      }
+    }
+
+    if (dueToday.length > 0) {
+      lines.push(`${dueToday.length} due today:`);
+      for (const c of dueToday.slice(0, 3)) {
+        const personBit = c.person ? ` (${c.person})` : '';
+        lines.push(`  - ${c.text.slice(0, 50)}${personBit}`);
+      }
+    }
+
+    const totalOpen = open.length;
+    if (totalOpen > urgent.length) {
+      lines.push(`${totalOpen - urgent.length} more open — run /commitments`);
+    }
+
+    return { title: 'Commitments', content: lines.join('\n') };
+  } catch {
+    return { title: 'Commitments', content: 'Could not load commitments.' };
+  }
+}
+
 // -- Formatting ---------------------------------------------------------------
 
 /**
@@ -496,9 +542,12 @@ function generateMorningBrief(vaultPath) {
   const actions = buildPendingActions(vaultPath);
   const overnight = buildOvernightChanges(vaultPath);
 
+  const commitments = buildCommitments(vaultPath);
+
   const sections = [
     priorityResult.section,
     meetings,
+    commitments,
     decisions,
     actions,
     overnight,

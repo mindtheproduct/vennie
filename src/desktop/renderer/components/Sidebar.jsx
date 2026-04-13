@@ -1,48 +1,69 @@
 import React from 'react';
+import { MessageSquare, MessagesSquare, PenLine, LayoutDashboard, Activity, Users, FolderOpen, Zap, Settings } from 'lucide-react';
+import { cn } from '../lib/utils.js';
 
-const NAV_ITEMS = [
-  { id: 'chat', label: 'Chat', icon: '\u{1F4AC}', shortcut: '\u23181' },
-  { id: 'dashboard', label: 'Dashboard', icon: '\u{1F3E0}', shortcut: '\u23182' },
-  { id: 'vault', label: 'Vault', icon: '\u{1F4C1}', shortcut: '\u23183' },
-  { id: 'skills', label: 'Skills', icon: '\u26A1', shortcut: '\u23184' },
-  { id: 'settings', label: 'Settings', icon: '\u2699\uFE0F', shortcut: '\u23185' },
+const NAV_GROUPS = [
+  // Primary — creation & conversation
+  [
+    { id: 'chat', icon: MessageSquare },
+    { id: 'threads', icon: MessagesSquare },
+    { id: 'focus', icon: PenLine },
+  ],
+  // Secondary — information
+  [
+    { id: 'dashboard', icon: LayoutDashboard },
+    { id: 'activity', icon: Activity },
+    { id: 'people', icon: Users },
+  ],
+  // Tertiary — tools
+  [
+    { id: 'vault', icon: FolderOpen },
+    { id: 'skills', icon: Zap },
+  ],
 ];
 
 export default function Sidebar({ activeView, onNavigate }) {
-  const e = React.createElement;
+  return (
+    <nav className="flex flex-col items-center w-[52px] shrink-0 py-2 bg-[var(--surface-primary)]">
+      {NAV_GROUPS.map((group, gi) => (
+        <div key={gi} className="flex flex-col items-center gap-0.5">
+          {gi > 0 && <div className="w-5 h-px bg-[var(--border)] my-1.5" />}
+          {group.map(item => (
+            <NavIcon
+              key={item.id}
+              item={item}
+              active={activeView === item.id}
+              onClick={() => onNavigate(item.id)}
+            />
+          ))}
+        </div>
+      ))}
 
-  return e('nav', {
-    style: {
-      width: 56,
-      background: 'var(--bg-secondary)',
-      borderRight: '1px solid var(--border-subtle)',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      padding: '12px 0',
-      gap: 4,
-    }
-  },
-    ...NAV_ITEMS.map(item =>
-      e('button', {
-        key: item.id,
-        onClick: () => onNavigate(item.id),
-        title: `${item.label} (${item.shortcut})`,
-        style: {
-          width: 40,
-          height: 40,
-          border: 'none',
-          borderRadius: 'var(--radius-sm)',
-          background: activeView === item.id ? 'var(--bg-active)' : 'transparent',
-          color: activeView === item.id ? 'var(--cyan)' : 'var(--text-dim)',
-          cursor: 'pointer',
-          fontSize: 18,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          transition: 'all 0.15s',
-        }
-      }, item.icon)
-    ),
+      <div className="flex-1" />
+
+      <NavIcon
+        item={{ id: 'settings', icon: Settings }}
+        active={activeView === 'settings'}
+        onClick={() => onNavigate('settings')}
+      />
+    </nav>
+  );
+}
+
+function NavIcon({ item, active, onClick }) {
+  const Icon = item.icon;
+  return (
+    <button
+      onClick={onClick}
+      title={item.id}
+      className={cn(
+        'w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-150',
+        active
+          ? 'bg-[var(--accent-subtle)] text-[var(--accent)]'
+          : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--surface-tertiary)]'
+      )}
+    >
+      <Icon size={17} strokeWidth={active ? 2 : 1.5} />
+    </button>
   );
 }

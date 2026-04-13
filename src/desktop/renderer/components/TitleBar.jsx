@@ -1,73 +1,40 @@
 import React from 'react';
+import { cn } from '../lib/utils.js';
 
-const VIEW_TITLES = {
-  chat: 'Chat',
-  dashboard: 'Dashboard',
-  vault: 'Vault',
-  skills: 'Skills',
-  settings: 'Settings',
-};
+export default function TitleBar({ view, appData }) {
+  const model = (appData?.model || '')
+    .replace('claude-', '')
+    .replace('-20250514', '')
+    .replace('-4-6', ' 4.6')
+    .replace('-4-5-20251001', ' 4.5');
 
-export default function TitleBar({ view, appData, onPaletteToggle }) {
-  const e = React.createElement;
+  const cost = appData?.cost?.cost || 0;
 
-  return e('div', { className: 'titlebar' },
-    // Title
-    e('div', {
-      style: { flex: 1, display: 'flex', alignItems: 'center', gap: 12, paddingLeft: 8 }
-    },
-      e('span', {
-        style: { color: 'var(--cyan)', fontWeight: 700, fontSize: 15 }
-      }, 'V'),
-      e('span', {
-        style: { color: 'var(--text-dim)', fontSize: 12 }
-      }, VIEW_TITLES[view] || 'Vennie'),
-    ),
+  return (
+    <div
+      className="titlebar-drag h-[36px] flex items-center px-4 bg-[var(--surface-primary)] select-none"
+      style={{ paddingLeft: 80 }}
+    >
+      {/* Left — subtle view indicator */}
+      <span className="text-[11px] text-[var(--text-tertiary)] font-medium tracking-wide uppercase">
+        {view === 'chat' ? '' : view}
+      </span>
 
-    // Search / Command Palette trigger
-    e('button', {
-      onClick: onPaletteToggle,
-      style: {
-        background: 'var(--bg-tertiary)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-sm)',
-        color: 'var(--text-dim)',
-        padding: '4px 12px',
-        fontSize: 12,
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        minWidth: 200,
-      }
-    },
-      e('span', null, 'Search or run command...'),
-      e('kbd', {
-        style: {
-          background: 'var(--bg-hover)',
-          padding: '1px 6px',
-          borderRadius: 3,
-          fontSize: 11,
-          color: 'var(--text-dim)',
-          marginLeft: 'auto',
-        }
-      }, '\u2318K'),
-    ),
+      <div className="flex-1" />
 
-    // Model + cost indicator
-    e('div', {
-      style: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        marginLeft: 16,
-        fontSize: 11,
-        color: 'var(--text-dim)',
-      }
-    },
-      e('span', null, (appData?.model || '').replace('claude-', '').replace(/-\d+$/, '')),
-      appData?.cost?.cost > 0 &&
-        e('span', null, `$${appData.cost.cost.toFixed(4)}`),
-    ),
+      {/* Right — model + cost, quiet */}
+      <div className="flex items-center gap-3 text-[11px] font-mono">
+        {model && (
+          <span className="text-[var(--text-tertiary)]">
+            {model}
+          </span>
+        )}
+        {cost > 0 && (
+          <span className={cn(cost > 0.05 ? 'text-[var(--warning)]' : 'text-[var(--text-tertiary)]')}>
+            ${cost.toFixed(3)}
+          </span>
+        )}
+      </div>
+    </div>
   );
 }

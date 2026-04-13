@@ -95,10 +95,33 @@ ${c.bold}Usage:${c.reset}
   ${c.green}vennie setup${c.reset}        Set up your API key (first time)
   ${c.green}vennie init${c.reset}         Create a new vault and run onboarding
   ${c.green}vennie status${c.reset}       Quick status check
+  ${c.green}vennie log${c.reset}          Quick capture (decision/win/idea/task/note)
+  ${c.green}vennie brief${c.reset}        Print your morning brief
+  ${c.green}vennie search${c.reset}       Search your vault
   ${c.green}vennie update${c.reset}       Check for and apply updates
   ${c.green}vennie desktop${c.reset}      Launch the desktop app
   ${c.green}vennie doctor${c.reset}       Health check (dependencies, MCP servers, hooks)
+  ${c.green}vennie watch${c.reset}        Watch inbox for new files and auto-process
+  ${c.green}vennie run${c.reset} ${c.dim}"prompt"${c.reset}  Run a prompt headlessly (no UI)
+  ${c.green}vennie history${c.reset}      Browse and resume past sessions
   ${c.green}vennie help${c.reset}         Show this help message
+
+${c.bold}Session resume:${c.reset}
+  ${c.green}vennie -c${c.reset}           Resume the most recent session (--continue)
+  ${c.green}vennie -H${c.reset}           Browse past sessions interactively (--history)
+  ${c.green}vennie --session${c.reset} ${c.dim}<id>${c.reset}  Resume a specific session by ID
+
+${c.bold}Run mode:${c.reset}
+  ${c.green}vennie run${c.reset} "research competitors"           Run prompt, stream to stdout
+  ${c.green}vennie run --yes${c.reset} "update the radar"         Auto-approve all tools
+  ${c.green}vennie run -o out.md${c.reset} "write a PRD"          Save output to file
+  ${c.dim}cat notes.txt | vennie run "extract action items"   Pipe input as context${c.reset}
+  ${c.dim}echo "top priority?" | vennie                       Pipe triggers run mode${c.reset}
+
+${c.bold}Model flags:${c.reset}
+  ${c.green}--opus${c.reset}              Use Opus 4.6 (smartest, most expensive)
+  ${c.green}--sonnet${c.reset}            Use Sonnet 4.6 (balanced — default)
+  ${c.green}--haiku${c.reset}             Use Haiku 4.5 (fastest, cheapest)
 
 ${c.dim}By Mind the Product — https://vennie.ai${c.reset}
 `);
@@ -278,7 +301,7 @@ function cmdInit() {
   startInkApp(vaultPath, version);
 }
 
-function cmdStart() {
+function cmdStart(resumedSession) {
   const vaultPath = getVaultPath();
 
   if (!vaultPath) {
@@ -300,7 +323,97 @@ function cmdStart() {
   })();
 
   const { startInkApp } = require('../src/cli/app.js');
-  startInkApp(vaultPath, version);
+  startInkApp(vaultPath, version, resumedSession || null);
+}
+
+function cmdContinue() {
+  const vaultPath = getVaultPath();
+  if (!vaultPath) {
+    log.warn('No Vennie vault found.');
+    process.exit(1);
+  }
+
+  const { listSessions, resumeSession } = require('../src/core/context-manager.js');
+  const sessions = listSessions(vaultPath, 1);
+  if (sessions.length === 0) {
+    log.warn('No saved sessions to resume.');
+    log.info('Start a new session with just `vennie`.');
+    process.exit(1);
+  }
+
+  const session = resumeSession(vaultPath, sessions[0].id);
+  if (!session) {
+    log.error('Failed to load session.');
+    process.exit(1);
+  }
+
+  log.ok(`Resuming: ${sessions[0].summary || sessions[0].id}`);
+  cmdStart(session);
+}
+
+function cmdResumeSession(sessionId) {
+  const vaultPath = getVaultPath();
+  if (!vaultPath) {
+    log.warn('No Vennie vault found.');
+    process.exit(1);
+  }
+
+  const { resumeSession } = require('../src/core/context-manager.js');
+  const session = resumeSession(vaultPath, sessionId);
+  if (!session) {
+    log.error(`Session not found: ${sessionId}`);
+    process.exit(1);
+  }
+
+  log.ok(`Resuming: ${session.summary || sessionId}`);
+  cmdStart(session);
+}
+
+function cmdHistory() {
+  const vaultPath = getVaultPath();
+  if (!vaultPath) {
+    log.warn('No Vennie vault found.');
+    process.exit(1);
+  }
+
+  const { listSessions, resumeSession } = require('../src/core/context-manager.js');
+  const sessions = listSessions(vaultPath, 20);
+  if (sessions.length === 0) {
+    log.warn('No saved sessions.');
+    log.info('Start a session with `vennie` — sessions are auto-saved on exit.');
+    process.exit(0);
+  }
+
+  log.banner('Session History');
+  for (let i = 0; i < sessions.length; i++) {
+    const s = sessions[i];
+    const date = new Date(s.timestamp).toLocaleDateString('en-GB', {
+      day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+    });
+    const topic = s.summary || 'Untitled';
+    const costStr = s.cost > 0 ? ` · $${s.cost.toFixed(4)}` : '';
+    console.log(`  ${c.cyan}${String(i + 1).padStart(2)}${c.reset}  ${c.dim}${date}${c.reset}  ${topic} ${c.dim}(${s.messageCount} msgs${costStr})${c.reset}`);
+  }
+
+  console.log();
+  const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
+  rl.question(`  ${c.bold}Resume session (number) or Enter to cancel:${c.reset} `, (answer) => {
+    rl.close();
+    const idx = parseInt(answer, 10) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= sessions.length) {
+      if (answer.trim()) log.warn('Invalid selection.');
+      process.exit(0);
+    }
+
+    const session = resumeSession(vaultPath, sessions[idx].id);
+    if (!session) {
+      log.error('Failed to load session.');
+      process.exit(1);
+    }
+
+    log.ok(`Resuming: ${sessions[idx].summary || sessions[idx].id}`);
+    cmdStart(session);
+  });
 }
 
 function cmdStatus() {
@@ -547,6 +660,150 @@ function cmdDesktop() {
   setTimeout(() => process.exit(0), 500);
 }
 
+function cmdLog() {
+  const vaultPath = getVaultPath();
+  if (!vaultPath) {
+    log.error('No Vennie vault found.');
+    log.info(`Run ${c.green}vennie init${c.reset} to create one.`);
+    process.exit(1);
+  }
+
+  // Collect everything after "log" as the input
+  const logIdx = process.argv.indexOf('log');
+  const rawInput = process.argv.slice(logIdx + 1).join(' ').trim();
+
+  if (!rawInput) {
+    log.error('Nothing to log.');
+    console.log(`\n${c.bold}Usage:${c.reset}`);
+    console.log(`  ${c.green}vennie log "decision: going with Stripe"${c.reset}`);
+    console.log(`  ${c.green}vennie log "win: shipped the new onboarding flow"${c.reset}`);
+    console.log(`  ${c.green}vennie log "idea: what if we added voice input"${c.reset}`);
+    console.log(`  ${c.green}vennie log "task: review Q1 numbers by Friday"${c.reset}`);
+    console.log(`  ${c.green}vennie log "note: Sarah mentioned Q2 reorg"${c.reset}`);
+    console.log(`  ${c.green}vennie log "some quick note"${c.reset}  ${c.dim}(defaults to note)${c.reset}\n`);
+    process.exit(1);
+  }
+
+  const { quickCapture, parseLogCommand } = require('../src/core/vault-pulse.js');
+
+  // Parse type prefix — support "type: content" and "type content" formats
+  let input = rawInput;
+  // Normalize "type: content" → "type content" for the parser
+  const colonMatch = input.match(/^(decision|win|idea|note|task):\s*/i);
+  if (colonMatch) {
+    input = colonMatch[1].toLowerCase() + ' ' + input.slice(colonMatch[0].length);
+  }
+
+  const { type, content } = parseLogCommand(input);
+
+  if (!content) {
+    log.error('Nothing to log — provide some text after the type.');
+    process.exit(1);
+  }
+
+  try {
+    const now = new Date();
+    const time = now.toTimeString().slice(0, 5);
+    const result = quickCapture(vaultPath, type, `[${time}] ${content}`);
+    log.ok(`Logged ${c.bold}${type}${c.reset} to ${c.dim}${result.message.replace('Logged ' + type + ' in ', '')}${c.reset}`);
+  } catch (err) {
+    log.error(`Failed to log: ${err.message}`);
+    process.exit(1);
+  }
+}
+
+function cmdBrief() {
+  const vaultPath = getVaultPath();
+  if (!vaultPath) {
+    log.error('No Vennie vault found.');
+    log.info(`Run ${c.green}vennie init${c.reset} to create one.`);
+    process.exit(1);
+  }
+
+  const { generateMorningBrief } = require('../src/core/morning-brief.js');
+
+  try {
+    const brief = generateMorningBrief(vaultPath);
+
+    // Print with ANSI colors for terminal
+    console.log();
+    console.log(`${c.bold}${c.cyan}  Morning Brief${c.reset}`);
+    console.log(`${c.dim}  ${'-'.repeat(48)}${c.reset}`);
+    console.log();
+    console.log(`  ${c.bold}${c.yellow}Top Priority:${c.reset} ${brief.topPriority}`);
+
+    for (const section of brief.sections) {
+      console.log();
+      console.log(`  ${c.bold}${c.magenta}${section.title}${c.reset}`);
+      const contentLines = section.content.split('\n');
+      for (const line of contentLines) {
+        console.log(`  ${c.dim}${line}${c.reset}`);
+      }
+    }
+
+    console.log();
+  } catch (err) {
+    log.error(`Failed to generate brief: ${err.message}`);
+    process.exit(1);
+  }
+}
+
+function cmdSearch() {
+  const vaultPath = getVaultPath();
+  if (!vaultPath) {
+    log.error('No Vennie vault found.');
+    log.info(`Run ${c.green}vennie init${c.reset} to create one.`);
+    process.exit(1);
+  }
+
+  // Collect everything after "search" as the query
+  const searchIdx = process.argv.indexOf('search');
+  const query = process.argv.slice(searchIdx + 1).join(' ').trim();
+
+  if (!query) {
+    log.error('No search query provided.');
+    console.log(`\n${c.bold}Usage:${c.reset}  ${c.green}vennie search "stakeholder alignment"${c.reset}\n`);
+    process.exit(1);
+  }
+
+  const { searchVault } = require('../src/core/search.js');
+
+  try {
+    const results = searchVault(vaultPath, query, { topN: 10 });
+
+    if (results.length === 0) {
+      log.warn(`No results for "${query}"`);
+      process.exit(0);
+    }
+
+    console.log();
+    console.log(`${c.bold}${c.cyan}  Search: "${query}"${c.reset}  ${c.dim}(${results.length} result${results.length === 1 ? '' : 's'})${c.reset}`);
+    console.log(`${c.dim}  ${'-'.repeat(48)}${c.reset}`);
+
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+      const scoreBar = c.dim + '[' + String(r.score.toFixed(2)).padStart(5) + ']' + c.reset;
+      console.log();
+      console.log(`  ${c.bold}${c.green}${i + 1}.${c.reset} ${c.bold}${r.file}${c.reset}  ${scoreBar}`);
+
+      // Show a trimmed snippet (first 160 chars, single line)
+      const snippet = r.snippet
+        .replace(/\n+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 160);
+      // Replace **bold** markers with ANSI bold for terminal
+      const coloredSnippet = snippet.replace(/\*\*(.+?)\*\*/g, `${c.yellow}$1${c.dim}`);
+      console.log(`     ${c.dim}${coloredSnippet}${c.reset}`);
+    }
+
+    console.log();
+  } catch (err) {
+    log.error(`Search failed: ${err.message}`);
+    process.exit(1);
+  }
+}
+
 function cmdUpdate() {
   log.banner('Vennie Update');
 
@@ -578,13 +835,154 @@ function cmdUpdate() {
   console.log();
 }
 
+// ── Run (headless agent) ────────────────────────────────────────────────────
+
+function cmdRun(runArgs) {
+  const vaultPath = getVaultPath();
+
+  if (!vaultPath) {
+    log.error('No Vennie vault found.');
+    log.info(`Run ${c.green}vennie init${c.reset} to create one.`);
+    process.exit(1);
+  }
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    log.warn('No API key found.');
+    console.log(`\n  Run ${c.green}vennie setup${c.reset} first — it takes 30 seconds.\n`);
+    process.exit(1);
+  }
+
+  // Parse flags from runArgs
+  let yes = false;
+  let output = null;
+  const promptParts = [];
+
+  for (let i = 0; i < runArgs.length; i++) {
+    const arg = runArgs[i];
+    if (arg === '--yes' || arg === '-y') {
+      yes = true;
+    } else if (arg === '-o' || arg === '--output') {
+      output = runArgs[++i] || null;
+    } else {
+      promptParts.push(arg);
+    }
+  }
+
+  const cliPrompt = promptParts.join(' ').trim();
+
+  const { runHeadless, readStdin } = require('../src/cli/run.js');
+
+  // Check for piped stdin
+  const isPiped = !process.stdin.isTTY;
+
+  (async () => {
+    let prompt = cliPrompt;
+
+    if (isPiped) {
+      const stdinData = await readStdin();
+      if (stdinData) {
+        // Combine: stdin becomes context, CLI args become the instruction
+        if (prompt) {
+          prompt = `${prompt}\n\n---\n\n${stdinData}`;
+        } else {
+          prompt = stdinData;
+        }
+      }
+    }
+
+    if (!prompt) {
+      log.error('No prompt provided.');
+      console.log(`\n${c.bold}Usage:${c.reset}  ${c.green}vennie run "your prompt here"${c.reset}\n`);
+      process.exit(1);
+    }
+
+    try {
+      await runHeadless({ prompt, vaultPath, yes, output });
+      process.exit(0);
+    } catch (err) {
+      log.error(`Run failed: ${err.message}`);
+      process.exit(1);
+    }
+  })();
+}
+
+// ── Watch (file watcher) ──────────────────────────────────────────────────────
+
+function cmdWatch() {
+  const vaultPath = getVaultPath();
+
+  if (!vaultPath) {
+    log.error('No Vennie vault found.');
+    log.info(`Run ${c.green}vennie init${c.reset} to create one.`);
+    process.exit(1);
+  }
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    log.warn('No API key found.');
+    console.log(`\n  Run ${c.green}vennie setup${c.reset} first — it takes 30 seconds.\n`);
+    process.exit(1);
+  }
+
+  // Pass remaining args after 'watch' to the watcher
+  const watchArgs = process.argv.slice(process.argv.indexOf('watch') + 1);
+
+  const { startWatch } = require('../src/cli/watch.js');
+  startWatch(vaultPath, watchArgs);
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 function main() {
   const args = process.argv.slice(2);
-  const command = args[0] || 'start';
+
+  // ── Model override flags ──────────────────────────────────────
+  // --opus, --sonnet, --haiku set VENNIE_MODEL before the app starts
+  const MODEL_FLAGS = {
+    '--opus': 'claude-opus-4-6',
+    '--sonnet': 'claude-sonnet-4-6',
+    '--haiku': 'claude-haiku-4-5-20251001',
+  };
+
+  for (const [flag, modelId] of Object.entries(MODEL_FLAGS)) {
+    const idx = args.indexOf(flag);
+    if (idx !== -1) {
+      process.env.VENNIE_MODEL = modelId;
+      args.splice(idx, 1); // Remove the flag so it doesn't confuse command parsing
+      break; // Only one model flag allowed
+    }
+  }
+
+  // Handle session resume flags
+  if (args.includes('--continue') || args.includes('-c')) {
+    cmdContinue();
+    return;
+  }
+  if (args.includes('--history') || args.includes('-H')) {
+    cmdHistory();
+    return;
+  }
+  const sessionIdx = args.indexOf('--session');
+  if (sessionIdx !== -1) {
+    const sessionId = args[sessionIdx + 1];
+    if (!sessionId) {
+      log.error('Usage: vennie --session <session-id>');
+      process.exit(1);
+    }
+    cmdResumeSession(sessionId);
+    return;
+  }
+
+  let command = args[0] || 'start';
+
+  // Detect piped stdin with no explicit command — treat as headless run
+  if (!process.stdin.isTTY && (command === 'start' || !args[0])) {
+    command = 'run';
+  }
 
   switch (command) {
+    case 'run':
+      cmdRun(args.slice(1));
+      break;
     case 'setup':
       cmdSetup();
       break;
@@ -593,6 +991,9 @@ function main() {
       break;
     case 'start':
       cmdStart();
+      break;
+    case 'history':
+      cmdHistory();
       break;
     case 'desktop':
     case '--desktop':
@@ -606,6 +1007,18 @@ function main() {
       break;
     case 'doctor':
       cmdDoctor();
+      break;
+    case 'log':
+      cmdLog();
+      break;
+    case 'brief':
+      cmdBrief();
+      break;
+    case 'search':
+      cmdSearch();
+      break;
+    case 'watch':
+      cmdWatch();
       break;
     case 'help':
     case '--help':

@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { Sun, Moon, Monitor, Check } from 'lucide-react';
+import { cn } from '../lib/utils.js';
+import { useTheme } from '../lib/ThemeProvider.jsx';
 
 const MODELS = [
-  { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', description: 'Fast, capable, cost-effective' },
-  { id: 'claude-opus-4-6', label: 'Claude Opus 4.6', description: 'Most capable, higher cost' },
-  { id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', description: 'Fastest, cheapest' },
+  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6', description: 'Fast, capable, balanced', badge: 'Default' },
+  { id: 'claude-opus-4-6', label: 'Opus 4.6', description: 'Most capable, higher cost', badge: null },
+  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', description: 'Fastest, cheapest', badge: null },
 ];
 
 export default function SettingsView({ appData }) {
@@ -11,7 +14,7 @@ export default function SettingsView({ appData }) {
   const [personas, setPersonas] = useState([]);
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [saved, setSaved] = useState(false);
-  const e = React.createElement;
+  const { theme, setTheme } = useTheme();
 
   useEffect(() => {
     window.vennie.getSettings().then(setSettings);
@@ -45,256 +48,190 @@ export default function SettingsView({ appData }) {
   }
 
   if (!settings) {
-    return e('div', {
-      style: { padding: 40, color: 'var(--text-dim)' }
-    }, 'Loading settings...');
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="shimmer w-48 h-5 rounded-md" />
+      </div>
+    );
   }
 
-  return e('div', {
-    style: {
-      flex: 1,
-      overflow: 'auto',
-      padding: '32px 40px',
-      maxWidth: 700,
-    }
-  },
-    e('h1', {
-      style: { fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 32 }
-    }, 'Settings'),
+  return (
+    <div className="flex-1 overflow-auto bg-[var(--surface-primary)]">
+      <div className="max-w-[560px] mx-auto px-8 py-8">
+        <h1 className="text-xl font-bold text-[var(--text-primary)] tracking-tight mb-8">Settings</h1>
 
-    // API Key
-    section(e, 'API Key',
-      e('div', null,
-        e('div', {
-          style: { display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }
-        },
-          e('span', {
-            style: {
-              width: 8, height: 8, borderRadius: '50%',
-              background: settings.apiKeySet ? 'var(--green)' : 'var(--red)',
-            }
-          }),
-          e('span', {
-            style: { color: 'var(--text-secondary)', fontSize: 13 }
-          }, settings.apiKeySet ? 'API key configured' : 'No API key set'),
-        ),
-        e('div', {
-          style: { display: 'flex', gap: 8 }
-        },
-          e('input', {
-            type: 'password',
-            value: apiKeyInput,
-            onChange: (ev) => setApiKeyInput(ev.target.value),
-            placeholder: 'sk-ant-...',
-            style: {
-              flex: 1,
-              background: 'var(--bg-tertiary)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              padding: '8px 12px',
-              color: 'var(--text-primary)',
-              fontSize: 13,
-              outline: 'none',
-              fontFamily: 'var(--font-mono)',
-            }
-          }),
-          e('button', {
-            onClick: handleApiKeySave,
-            style: {
-              background: 'var(--cyan)',
-              border: 'none',
-              borderRadius: 'var(--radius-sm)',
-              color: 'var(--bg-primary)',
-              padding: '8px 16px',
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }
-          }, saved ? '\u2713 Saved' : 'Save'),
-        ),
-      )
-    ),
+        {/* Appearance */}
+        <Section title="Appearance">
+          <div className="flex gap-2">
+            {[
+              { id: 'light', label: 'Light', icon: Sun },
+              { id: 'dark', label: 'Dark', icon: Moon },
+              { id: 'system', label: 'System', icon: Monitor },
+            ].map(opt => {
+              const Icon = opt.icon;
+              return (
+                <button
+                  key={opt.id}
+                  onClick={() => setTheme(opt.id)}
+                  className={cn(
+                    'flex-1 flex flex-col items-center gap-2 py-4 rounded-xl transition-all',
+                    theme === opt.id
+                      ? 'bg-[var(--accent-subtle)] text-[var(--accent)]'
+                      : 'bg-[var(--surface-secondary)] text-[var(--text-tertiary)] hover:bg-[var(--surface-tertiary)]'
+                  )}
+                >
+                  <Icon size={18} />
+                  <span className="text-xs font-medium">{opt.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </Section>
 
-    // Model
-    section(e, 'Model',
-      e('div', {
-        style: { display: 'flex', flexDirection: 'column', gap: 8 }
-      },
-        ...MODELS.map(m =>
-          e('button', {
-            key: m.id,
-            onClick: () => handleModelChange(m.id),
-            style: {
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '12px 16px',
-              background: settings.model === m.id ? 'var(--bg-active)' : 'var(--bg-tertiary)',
-              border: settings.model === m.id ? '1px solid var(--cyan)' : '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              cursor: 'pointer',
-              color: 'var(--text-primary)',
-              textAlign: 'left',
-            }
-          },
-            e('div', null,
-              e('div', { style: { fontWeight: 600, fontSize: 14 } }, m.label),
-              e('div', { style: { color: 'var(--text-dim)', fontSize: 12, marginTop: 2 } }, m.description),
-            ),
-            settings.model === m.id && e('span', {
-              style: { color: 'var(--cyan)', fontSize: 16 }
-            }, '\u2713'),
-          )
-        ),
-      )
-    ),
+        {/* API Key */}
+        <Section title="API Key">
+          <div className="flex items-center gap-2 mb-3">
+            <div className={cn('w-1.5 h-1.5 rounded-full', settings.apiKeySet ? 'bg-[var(--success)]' : 'bg-[var(--danger)]')} />
+            <span className="text-xs text-[var(--text-secondary)]">
+              {settings.apiKeySet ? 'Configured' : 'Not set'}
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="password"
+              value={apiKeyInput}
+              onChange={(e) => setApiKeyInput(e.target.value)}
+              placeholder="sk-ant-..."
+              className="flex-1 px-3 py-2 rounded-lg bg-[var(--surface-secondary)] text-sm font-mono text-[var(--text-primary)] outline-none focus:bg-[var(--surface-tertiary)] transition-colors placeholder:text-[var(--text-tertiary)]"
+            />
+            <button
+              onClick={handleApiKeySave}
+              className="px-4 py-2 rounded-lg bg-[var(--accent)] text-white text-sm font-semibold hover:bg-[var(--accent-hover)] transition-colors"
+            >
+              {saved ? 'Saved' : 'Save'}
+            </button>
+          </div>
+        </Section>
 
-    // Extended Thinking
-    section(e, 'Extended Thinking',
-      e('button', {
-        onClick: handleThinkingToggle,
-        style: {
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          padding: '12px 16px',
-          background: 'var(--bg-tertiary)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-sm)',
-          cursor: 'pointer',
-          color: 'var(--text-primary)',
-          width: '100%',
-        }
-      },
-        e('div', {
-          style: {
-            width: 36,
-            height: 20,
-            borderRadius: 10,
-            background: settings.thinking ? 'var(--cyan)' : 'var(--border)',
-            position: 'relative',
-            transition: 'background 0.2s',
-          }
-        },
-          e('div', {
-            style: {
-              width: 16,
-              height: 16,
-              borderRadius: '50%',
-              background: 'white',
-              position: 'absolute',
-              top: 2,
-              left: settings.thinking ? 18 : 2,
-              transition: 'left 0.2s',
-            }
-          }),
-        ),
-        e('div', null,
-          e('div', { style: { fontWeight: 500 } }, settings.thinking ? 'Enabled' : 'Disabled'),
-          e('div', { style: { color: 'var(--text-dim)', fontSize: 12 } }, 'Deeper reasoning, higher cost'),
-        ),
-      )
-    ),
+        {/* Model */}
+        <Section title="Model">
+          <div className="space-y-1.5">
+            {MODELS.map(m => (
+              <button
+                key={m.id}
+                onClick={() => handleModelChange(m.id)}
+                className={cn(
+                  'w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all text-left',
+                  settings.model === m.id
+                    ? 'bg-[var(--accent-subtle)]'
+                    : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-tertiary)]'
+                )}
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className={cn('text-sm font-semibold', settings.model === m.id ? 'text-[var(--accent)]' : 'text-[var(--text-primary)]')}>{m.label}</span>
+                    {m.badge && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--accent-subtle)] text-[var(--accent)] font-medium uppercase tracking-wider">{m.badge}</span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-[var(--text-tertiary)] mt-0.5">{m.description}</div>
+                </div>
+                {settings.model === m.id && <Check size={14} className="text-[var(--accent)] shrink-0" />}
+              </button>
+            ))}
+          </div>
+        </Section>
 
-    // Persona
-    section(e, 'Active Persona',
-      e('div', {
-        style: { display: 'flex', flexDirection: 'column', gap: 8 }
-      },
-        e('button', {
-          onClick: () => handlePersonaChange('off'),
-          style: {
-            padding: '10px 16px',
-            background: !settings.persona ? 'var(--bg-active)' : 'var(--bg-tertiary)',
-            border: !settings.persona ? '1px solid var(--cyan)' : '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            cursor: 'pointer',
-            color: 'var(--text-primary)',
-            textAlign: 'left',
-            fontSize: 13,
-          }
-        }, 'Default Vennie (no persona)'),
-        ...personas.map(p =>
-          e('button', {
-            key: p.id,
-            onClick: () => handlePersonaChange(p.id),
-            style: {
-              padding: '10px 16px',
-              background: settings.persona === p.id ? 'var(--bg-active)' : 'var(--bg-tertiary)',
-              border: settings.persona === p.id ? '1px solid var(--cyan)' : '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              cursor: 'pointer',
-              color: 'var(--text-primary)',
-              textAlign: 'left',
-            }
-          },
-            e('div', { style: { fontWeight: 500, fontSize: 13 } }, p.name),
-            p.bestFor && e('div', { style: { color: 'var(--text-dim)', fontSize: 12, marginTop: 2 } }, p.bestFor),
-          )
-        ),
-      )
-    ),
+        {/* Extended Thinking */}
+        <Section title="Extended Thinking">
+          <button
+            onClick={handleThinkingToggle}
+            className="w-full flex items-center gap-4 px-4 py-3 rounded-xl bg-[var(--surface-secondary)] hover:bg-[var(--surface-tertiary)] transition-all"
+          >
+            <div
+              className={cn(
+                'w-9 h-[20px] rounded-full relative transition-colors',
+                settings.thinking ? 'bg-[var(--accent)]' : 'bg-[var(--surface-tertiary)]'
+              )}
+            >
+              <div
+                className={cn(
+                  'w-4 h-4 rounded-full bg-white absolute top-[2px] transition-all shadow-sm',
+                  settings.thinking ? 'left-[18px]' : 'left-[2px]'
+                )}
+              />
+            </div>
+            <div className="text-left">
+              <div className="text-sm font-medium text-[var(--text-primary)]">{settings.thinking ? 'On' : 'Off'}</div>
+              <div className="text-[11px] text-[var(--text-tertiary)]">Deeper reasoning, higher cost</div>
+            </div>
+          </button>
+        </Section>
 
-    // Session cost
-    section(e, 'Session Cost',
-      e('div', {
-        style: {
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr 1fr',
-          gap: 12,
-          padding: '12px 16px',
-          background: 'var(--bg-tertiary)',
-          borderRadius: 'var(--radius-sm)',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 13,
-        }
-      },
-        e('div', null,
-          e('div', { style: { color: 'var(--text-dim)', fontSize: 11 } }, 'Input'),
-          e('div', { style: { fontWeight: 600 } }, (settings.cost?.input || 0).toLocaleString()),
-        ),
-        e('div', null,
-          e('div', { style: { color: 'var(--text-dim)', fontSize: 11 } }, 'Output'),
-          e('div', { style: { fontWeight: 600 } }, (settings.cost?.output || 0).toLocaleString()),
-        ),
-        e('div', null,
-          e('div', { style: { color: 'var(--text-dim)', fontSize: 11 } }, 'Cost'),
-          e('div', { style: { fontWeight: 600, color: 'var(--cyan)' } }, `$${(settings.cost?.cost || 0).toFixed(4)}`),
-        ),
-      )
-    ),
+        {/* Persona */}
+        <Section title="Persona">
+          <div className="space-y-1.5">
+            <button
+              onClick={() => handlePersonaChange('off')}
+              className={cn(
+                'w-full text-left px-4 py-3 rounded-xl transition-all text-sm font-medium',
+                !settings.persona
+                  ? 'bg-[var(--accent-subtle)] text-[var(--accent)]'
+                  : 'bg-[var(--surface-secondary)] text-[var(--text-secondary)] hover:bg-[var(--surface-tertiary)]'
+              )}
+            >
+              Default
+            </button>
+            {personas.map(p => (
+              <button
+                key={p.id}
+                onClick={() => handlePersonaChange(p.id)}
+                className={cn(
+                  'w-full text-left px-4 py-3 rounded-xl transition-all',
+                  settings.persona === p.id
+                    ? 'bg-[var(--accent-subtle)]'
+                    : 'bg-[var(--surface-secondary)] hover:bg-[var(--surface-tertiary)]'
+                )}
+              >
+                <div className={cn('text-sm font-medium', settings.persona === p.id ? 'text-[var(--accent)]' : 'text-[var(--text-primary)]')}>{p.name}</div>
+                {p.bestFor && <div className="text-[11px] text-[var(--text-tertiary)] mt-0.5">{p.bestFor}</div>}
+              </button>
+            ))}
+          </div>
+        </Section>
 
-    // Vault info
-    section(e, 'Vault',
-      e('div', {
-        style: {
-          padding: '12px 16px',
-          background: 'var(--bg-tertiary)',
-          borderRadius: 'var(--radius-sm)',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 13,
-          color: 'var(--text-secondary)',
-          wordBreak: 'break-all',
-        }
-      }, settings.vaultPath || 'Not configured'),
-    ),
+        {/* Session Cost */}
+        <Section title="Session">
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: 'Input', value: (settings.cost?.input || 0).toLocaleString() },
+              { label: 'Output', value: (settings.cost?.output || 0).toLocaleString() },
+              { label: 'Cost', value: `$${(settings.cost?.cost || 0).toFixed(4)}`, accent: true },
+            ].map(s => (
+              <div key={s.label} className="bg-[var(--surface-secondary)] rounded-xl p-3">
+                <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-widest mb-1">{s.label}</div>
+                <div className={cn('text-sm font-semibold font-mono', s.accent ? 'text-[var(--accent)]' : 'text-[var(--text-primary)]')}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+        </Section>
+
+        {/* Vault */}
+        <Section title="Vault Path">
+          <div className="px-4 py-3 bg-[var(--surface-secondary)] rounded-xl text-sm font-mono text-[var(--text-tertiary)] break-all">
+            {settings.vaultPath || 'Not configured'}
+          </div>
+        </Section>
+      </div>
+    </div>
   );
 }
 
-function section(e, title, content) {
-  return e('div', {
-    style: { marginBottom: 28 }
-  },
-    e('h2', {
-      style: {
-        fontSize: 14,
-        fontWeight: 600,
-        color: 'var(--text-secondary)',
-        marginBottom: 12,
-        textTransform: 'uppercase',
-        letterSpacing: '0.03em',
-      }
-    }, title),
-    content,
+function Section({ title, children }) {
+  return (
+    <div className="mb-8">
+      <h2 className="text-[11px] font-semibold text-[var(--text-tertiary)] uppercase tracking-widest mb-3">{title}</h2>
+      {children}
+    </div>
   );
 }

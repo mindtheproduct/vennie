@@ -1,7 +1,7 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
+const { getUpstreamArtifacts, formatArtifactsForPrompt } = require('./skill-artifacts.js');
+const { buildTieredContext } = require('./context-tiers.js');
 
 // ── Agent Loop ──────────────────────────────────────────────────────────────
 // The brain of Vennie. Implements the standard Claude tool_use loop:
@@ -26,65 +26,119 @@ const MODEL_PRICING = {
   'claude-haiku-4-5-20251001': { input: 0.80, output: 4.0 },
 };
 
-const DEFAULT_MAX_TURNS = 25;
+const DEFAULT_MAX_TURNS = 12;
 
-// ── System Prompt Builder ───────────────────────────────────────────────────
+// ── Permission Tiers ────────────────────────────────────────────────────────
+// Tools are categorised by risk level for the permission model.
+
+const TOOL_TIERS = {
+  // Auto-allow — read-only, no side effects
+  auto: new Set(['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'AskUser']),
+  // Confirm — writes to vault, creates/modifies files
+  confirm: new Set(['Write', 'Edit']),
+  // Approve — destructive or external side effects
+  approve: new Set(['Bash']),
+};
+
+function getToolTier(name) {
+  if (name.startsWith('mcp__')) return 'confirm'; // MCP tools default to confirm
+  if (TOOL_TIERS.auto.has(name)) return 'auto';
+  if (TOOL_TIERS.confirm.has(name)) return 'confirm';
+  if (TOOL_TIERS.approve.has(name)) return 'approve';
+  return 'confirm'; // Default unknown tools to confirm
+}
+
+// ── Citation Tracking ───────────────────────────────────────────────────────
+
+function extractCitations(toolName, toolInput, toolResult) {
+  if (!toolResult || toolResult.error) return null;
+
+  if (toolName === 'Read' && toolInput.file_path) {
+    const filename = toolInput.file_path.split('/').pop();
+    const lines = toolInput.offset
+      ? `lines ${toolInput.offset + 1}-${(toolInput.offset || 0) + (toolInput.limit || 0)}`
+      : `${toolResult.total_lines || '?'} lines`;
+    return { type: 'file', path: toolInput.file_path, filename, lines };
+  }
+
+  if (toolName === 'Grep' && toolResult.matches?.length > 0) {
+    // Extract unique files from grep results
+    const files = [...new Set(toolResult.matches.map(m => m.split(':')[0]))].slice(0, 5);
+    return { type: 'search', pattern: toolInput.pattern, files, matchCount: toolResult.count };
+  }
+
+  if (toolName === 'Glob' && toolResult.files?.length > 0) {
+    return { type: 'glob', pattern: toolInput.pattern, fileCount: toolResult.count };
+  }
+
+  return null;
+}
+
+// ── Result Preview ──────────────────────────────────────────────────────────
+
+function getResultPreview(toolName, result, maxLines = 3) {
+  if (!result || result.error) return null;
+
+  if (toolName === 'Read' && result.content) {
+    const lines = result.content.split('\n').slice(0, maxLines);
+    return lines.join('\n') + (result.total_lines > maxLines ? '\n...' : '');
+  }
+
+  if (toolName === 'Grep' && result.matches) {
+    return result.matches.slice(0, maxLines).join('\n') + (result.count > maxLines ? `\n... (${result.count} total)` : '');
+  }
+
+  if (toolName === 'Glob' && result.files) {
+    return result.files.slice(0, maxLines).map(f => f.split('/').pop()).join('\n') + (result.count > maxLines ? `\n... (${result.count} files)` : '');
+  }
+
+  if (toolName === 'Bash' && result.output) {
+    const lines = result.output.split('\n').slice(0, maxLines);
+    return lines.join('\n') + (result.output.split('\n').length > maxLines ? '\n...' : '');
+  }
+
+  if (toolName === 'Write' || toolName === 'Edit') {
+    return result.success ? `✓ ${result.path?.split('/').pop() || 'done'}` : null;
+  }
+
+  return null;
+}
+
+// ── System Prompt Builder (Tiered) ──────────────────────────────────────────
+// Uses context-tiers.js to build a minimal, relevant system prompt instead
+// of dumping the full VENNIE.md + profile + everything into every turn.
 
 /**
- * Build the complete system prompt from CLAUDE.md + persona overlay + voice.
+ * Build the complete system prompt using tiered context injection.
+ * Only loads context relevant to the current turn to reduce token waste
+ * and improve model attention.
+ *
+ * Maintains the same signature for backwards compatibility with all callers.
  *
  * @param {string} vaultPath - Root of the Vennie vault
  * @param {string|null} activePersona - Name of active persona, or null
+ * @param {object} [learningsContext] - Context for retrieving relevant learnings
+ * @param {string[]} [learningsContext.personNames] - People mentioned
+ * @param {string[]} [learningsContext.projectNames] - Projects referenced
+ * @param {string} [learningsContext.skillName] - Active skill name
+ * @param {string} [learningsContext.topic] - Conversation topic
+ * @param {object} [extraOptions] - Additional options
+ * @param {string} [extraOptions.calibrationInstruction] - Response length calibration instruction
+ * @param {string} [extraOptions.preflightContext] - Pre-flight gathered context
  * @returns {string} Complete system prompt
  */
-function buildSystemPrompt(vaultPath, activePersona) {
-  const parts = [];
+function buildSystemPrompt(vaultPath, activePersona, learningsContext, extraOptions) {
+  const { systemPrompt } = buildTieredContext(vaultPath, {
+    persona: activePersona || undefined,
+    activeSkill: learningsContext?.skillName || undefined,
+    userMessage: learningsContext?.topic || undefined,
+    learningsContext: learningsContext || undefined,
+    calibrationInstruction: extraOptions?.calibrationInstruction || undefined,
+    preflightContext: extraOptions?.preflightContext || undefined,
+    energyInstruction: extraOptions?.energyInstruction || undefined,
+  });
 
-  // Core identity — CLAUDE.md (which is VENNIE.md copied into the vault)
-  const claudeMd = path.join(vaultPath, 'CLAUDE.md');
-  if (fs.existsSync(claudeMd)) {
-    parts.push(fs.readFileSync(claudeMd, 'utf8'));
-  }
-
-  // Voice profile — trained writing style
-  const voiceYaml = path.join(vaultPath, 'System', 'voice.yaml');
-  if (fs.existsSync(voiceYaml)) {
-    const voice = fs.readFileSync(voiceYaml, 'utf8');
-    parts.push(`\n---\n## Voice Profile\n\nAdopt this writing style in your responses:\n\n${voice}`);
-  }
-
-  // Persona overlay — additional behavioral instructions
-  if (activePersona) {
-    const slug = activePersona.toLowerCase().replace(/\s+/g, '-');
-    const searchDirs = ['core', 'marketplace', 'custom', '.'];
-    let personaContent = null;
-    for (const dir of searchDirs) {
-      const p = path.join(vaultPath, '.vennie', 'personas', dir, `${slug}.md`);
-      if (fs.existsSync(p)) {
-        personaContent = fs.readFileSync(p, 'utf8');
-        break;
-      }
-    }
-    if (personaContent) {
-      parts.push(`\n---\n## Active Persona: ${activePersona}\n\n${personaContent}`);
-    }
-  }
-
-  // User profile for context
-  const profileYaml = path.join(vaultPath, 'System', 'profile.yaml');
-  if (fs.existsSync(profileYaml)) {
-    const profile = fs.readFileSync(profileYaml, 'utf8');
-    parts.push(`\n---\n## User Profile\n\n${profile}`);
-  }
-
-  // Current date and time
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-  const timeStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  parts.push(`\n---\nCurrent date and time: ${dateStr}, ${timeStr} (${tz})`);
-
-  return parts.join('\n');
+  return systemPrompt;
 }
 
 // ── Agent Loop ──────────────────────────────────────────────────────────────
@@ -137,6 +191,19 @@ async function* agentLoop(messages, tools, systemPrompt, options = {}) {
   let fullSystem = systemPrompt;
   if (options.skillContext) {
     fullSystem += `\n\n---\n## Active Skill\n\n${options.skillContext}`;
+  }
+
+  // Inject upstream artifact context when a skill is active
+  if (options.activeSkill && options.vaultPath) {
+    try {
+      const upstream = getUpstreamArtifacts(options.vaultPath, options.activeSkill);
+      const artifactCtx = formatArtifactsForPrompt(upstream);
+      if (artifactCtx) {
+        fullSystem += `\n\n---\n${artifactCtx}`;
+      }
+    } catch {
+      // Artifact injection should never crash the agent
+    }
   }
 
   // Accumulate session cost
@@ -275,10 +342,51 @@ async function* agentLoop(messages, tools, systemPrompt, options = {}) {
         return;
       }
 
-      // Execute tool calls
+      // Execute tool calls with rich event metadata
       const toolResults = [];
-      for (const block of toolBlocks) {
-        yield { type: 'tool_start', name: block.name, input: block.input };
+      const isParallel = toolBlocks.length > 1;
+      const citations = [];
+
+      // Emit turn progress
+      yield {
+        type: 'turn_progress',
+        turn,
+        maxTurns,
+        toolCount: toolBlocks.length,
+        isParallel,
+      };
+
+      for (let ti = 0; ti < toolBlocks.length; ti++) {
+        const block = toolBlocks[ti];
+        const tier = getToolTier(block.name);
+        const startTime = Date.now();
+
+        yield {
+          type: 'tool_start',
+          name: block.name,
+          input: block.input,
+          tier,
+          index: ti,
+          total: toolBlocks.length,
+          isParallel,
+        };
+
+        // Permission check — yield a permission_request if not auto-tier
+        // The caller can handle this or ignore it (backwards compatible)
+        if (tier !== 'auto' && options.checkPermission) {
+          const allowed = await options.checkPermission(block.name, block.input, tier);
+          if (!allowed) {
+            const result = { error: `Permission denied for ${block.name}` };
+            yield { type: 'tool_result', name: block.name, result, success: false, tier, duration: 0 };
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: block.id,
+              content: JSON.stringify(result),
+              is_error: true,
+            });
+            continue;
+          }
+        }
 
         let result;
         let success = true;
@@ -290,14 +398,47 @@ async function* agentLoop(messages, tools, systemPrompt, options = {}) {
           success = false;
         }
 
-        yield { type: 'tool_result', name: block.name, result, success };
+        const duration = Date.now() - startTime;
+        const preview = getResultPreview(block.name, result);
+        const citation = extractCitations(block.name, block.input, result);
+        if (citation) citations.push(citation);
+
+        // Estimate result size in tokens (~4 chars per token)
+        const resultStr = JSON.stringify(result);
+        const resultTokens = Math.ceil(resultStr.length / 4);
+
+        yield {
+          type: 'tool_result',
+          name: block.name,
+          result,
+          success,
+          tier,
+          duration,
+          preview,
+          resultTokens,
+        };
 
         toolResults.push({
           type: 'tool_result',
           tool_use_id: block.id,
-          content: JSON.stringify(result),
+          content: resultStr,
           is_error: !success,
         });
+      }
+
+      // Emit citations if we collected any
+      if (citations.length > 0) {
+        yield { type: 'citations', sources: citations };
+      }
+
+      // Checkpoint summary every 5 turns
+      if (turn % 5 === 0 && turn < maxTurns) {
+        yield {
+          type: 'checkpoint',
+          turn,
+          maxTurns,
+          message: `Step ${turn}/${maxTurns} — ${toolBlocks.length} tool${toolBlocks.length > 1 ? 's' : ''} executed`,
+        };
       }
 
       // Add tool results as user message and loop
@@ -405,4 +546,7 @@ module.exports = {
   agentLoop,
   buildSystemPrompt,
   DEFAULT_MODEL,
+  MODEL_PRICING,
+  TOOL_TIERS,
+  getToolTier,
 };

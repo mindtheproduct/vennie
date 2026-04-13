@@ -23,6 +23,7 @@ const { addCompetitor, removeCompetitor, checkCompetitors, listCompetitors, form
 const { generateExercise, markExerciseCompleted, getStreak, formatExercise } = require('../../core/product-gym.js');
 const { captureShipment, suggestSkillFromDescription, getCareerTimeline, getSkillMatrix, formatCareerSummary } = require('../../core/ship-to-story.js');
 const { getWelcomeSuggestions, getResponseSuggestions, getIdleHint, getOnboardingTip } = require('../../core/suggestions.js');
+const { parseFileReferences, formatFileContext } = require('../../core/context-manager.js');
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -133,8 +134,22 @@ async function setupIPC(vaultPath, version) {
       skillCtxRef = null;
     }
 
+    // Parse @file references
+    const fileRefs = parseFileReferences(userContent, vaultPath);
+    if (fileRefs.files.length > 0) {
+      userContent = fileRefs.cleanInput;
+      for (const f of fileRefs.files) {
+        sender.send('agent:event', { type: 'system', message: `@${f.filename} injected` });
+      }
+    }
+
     messagesRef.push({ role: 'user', content: userContent });
     let systemPrompt = buildSystemPrompt(vaultPath, personaRef);
+
+    // Inject @file content
+    if (fileRefs.files.length > 0) {
+      systemPrompt += formatFileContext(fileRefs.files);
+    }
 
     // Session memory (first message only)
     if (messagesRef.length === 1) {

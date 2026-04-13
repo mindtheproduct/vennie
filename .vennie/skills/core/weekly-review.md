@@ -139,3 +139,29 @@ Honest but not harsh. This is reflection, not self-flagellation.
 ## End With
 
 "Week reviewed. [N] wins captured, [N] decisions logged, next week's focus is set. Enjoy your weekend."
+
+## Career Snapshot (Automatic)
+
+At the end of every weekly review, automatically generate and save a career snapshot:
+
+1. Call `buildCareerSnapshot(vaultPath)` from `src/core/career-intelligence.js`
+2. Call `getSnapshotHistory(vaultPath, 1)` to get the previous snapshot
+3. If a previous snapshot exists, call `comparePeriods(current, previous)` for insights
+4. Call `saveSnapshot(vaultPath, snapshot)` to persist
+5. Show a brief comparison:
+
+```
+-- Career Pulse --
+[One-paragraph career brief from generateCareerBrief]
+
+Top signal: [most important insight from comparePeriods]
+Run /career-dashboard for the full picture.
+```
+
+This builds the longitudinal data that powers `/career-trajectory`. The more weekly reviews you do, the richer your career intelligence becomes.
+
+## Going Deeper
+
+For a deeper retrospective with per-person breakdowns, pattern analysis, and forcing questions, try `/retro`. Use `/retro month` or `/retro quarter` for longer time horizons.
+
+For career growth metrics and longitudinal trends, try `/career-dashboard` or `/career-trajectory`.

@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import { Search } from 'lucide-react';
+import { cn } from '../lib/utils.js';
 
-const CATEGORY_COLORS = {
-  planning: 'var(--cyan)',
-  career: 'var(--green)',
-  coaching: 'var(--purple)',
-  writing: 'var(--accent-blue)',
-  analysis: 'var(--yellow)',
-  general: 'var(--text-dim)',
+const CATEGORY_DOT = {
+  planning: 'bg-[var(--accent)]',
+  career: 'bg-[var(--success)]',
+  coaching: 'bg-[#a78bfa]',
+  writing: 'bg-[var(--cyan)]',
+  analysis: 'bg-[var(--warning)]',
+  general: 'bg-[var(--text-tertiary)]',
 };
 
 const CATEGORY_ORDER = ['planning', 'career', 'coaching', 'writing', 'analysis', 'general'];
@@ -14,7 +16,6 @@ const CATEGORY_ORDER = ['planning', 'career', 'coaching', 'writing', 'analysis',
 export default function SkillsView({ appData, onRunSkill }) {
   const [skills, setSkills] = useState([]);
   const [filter, setFilter] = useState('');
-  const e = React.createElement;
 
   useEffect(() => {
     window.vennie.listSkills().then(data => {
@@ -22,7 +23,6 @@ export default function SkillsView({ appData, onRunSkill }) {
     });
   }, []);
 
-  // Also include built-in commands as skills
   const builtInSkills = [
     { name: 'brief', description: 'Morning brief — your day at a glance', category: 'planning' },
     { name: 'gym', description: 'Product sense training exercise', category: 'coaching' },
@@ -39,10 +39,12 @@ export default function SkillsView({ appData, onRunSkill }) {
 
   const allSkills = [...builtInSkills, ...skills];
   const filtered = filter.trim()
-    ? allSkills.filter(s => s.name.toLowerCase().includes(filter.toLowerCase()) || (s.description || '').toLowerCase().includes(filter.toLowerCase()))
+    ? allSkills.filter(s =>
+        s.name.toLowerCase().includes(filter.toLowerCase()) ||
+        (s.description || '').toLowerCase().includes(filter.toLowerCase())
+      )
     : allSkills;
 
-  // Group by category
   const grouped = {};
   for (const s of filtered) {
     const cat = s.category || 'general';
@@ -50,96 +52,53 @@ export default function SkillsView({ appData, onRunSkill }) {
     grouped[cat].push(s);
   }
 
-  return e('div', {
-    style: {
-      flex: 1,
-      overflow: 'auto',
-      padding: '32px 40px',
-      maxWidth: 900,
-    }
-  },
-    e('div', {
-      style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }
-    },
-      e('h1', {
-        style: { fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }
-      }, 'Skills'),
-      e('input', {
-        type: 'text',
-        value: filter,
-        onChange: (ev) => setFilter(ev.target.value),
-        placeholder: 'Filter skills...',
-        style: {
-          background: 'var(--bg-tertiary)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-sm)',
-          padding: '8px 14px',
-          color: 'var(--text-primary)',
-          fontSize: 13,
-          outline: 'none',
-          width: 200,
-          fontFamily: 'var(--font-sans)',
-        }
-      }),
-    ),
+  return (
+    <div className="flex-1 overflow-auto bg-[var(--surface-primary)]">
+      <div className="max-w-[760px] mx-auto px-8 py-8">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-xl font-bold text-[var(--text-primary)] tracking-tight">Skills</h1>
+            <p className="text-xs text-[var(--text-tertiary)] mt-1 font-mono">{allSkills.length} available</p>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--surface-secondary)] focus-within:bg-[var(--surface-tertiary)] transition-colors w-[200px]">
+            <Search size={13} className="text-[var(--text-tertiary)] shrink-0" />
+            <input
+              type="text"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Filter..."
+              className="flex-1 bg-transparent border-none outline-none text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)]"
+            />
+          </div>
+        </div>
 
-    e('p', {
-      style: { color: 'var(--text-dim)', fontSize: 13, marginBottom: 24 }
-    }, `${allSkills.length} skills available. Click to run in chat.`),
-
-    ...CATEGORY_ORDER
-      .filter(cat => grouped[cat]?.length > 0)
-      .map(cat =>
-        e('div', { key: cat, style: { marginBottom: 28 } },
-          e('h2', {
-            style: {
-              fontSize: 13,
-              fontWeight: 600,
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              color: CATEGORY_COLORS[cat] || 'var(--text-dim)',
-              marginBottom: 12,
-            }
-          }, cat),
-          e('div', {
-            style: {
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-              gap: 10,
-            }
-          },
-            ...grouped[cat].map(skill =>
-              e('button', {
-                key: skill.name,
-                onClick: () => onRunSkill(skill.name),
-                style: {
-                  background: 'var(--bg-secondary)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-md)',
-                  padding: '14px 18px',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 4,
-                  transition: 'all 0.15s',
-                }
-              },
-                e('span', {
-                  style: {
-                    color: 'var(--text-primary)',
-                    fontWeight: 600,
-                    fontSize: 14,
-                    fontFamily: 'var(--font-mono)',
-                  }
-                }, `/${skill.name}`),
-                e('span', {
-                  style: { color: 'var(--text-dim)', fontSize: 12, lineHeight: 1.4 }
-                }, skill.description || ''),
-              )
-            ),
-          ),
-        )
-      ),
+        {CATEGORY_ORDER.filter(cat => grouped[cat]?.length > 0).map(cat => (
+          <div key={cat} className="mb-8">
+            <div className="flex items-center gap-2 mb-3">
+              <div className={cn('w-1.5 h-1.5 rounded-full', CATEGORY_DOT[cat])} />
+              <h2 className="text-[11px] font-semibold uppercase tracking-widest text-[var(--text-tertiary)]">
+                {cat}
+              </h2>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {grouped[cat].map(skill => (
+                <button
+                  key={skill.name}
+                  onClick={() => onRunSkill(skill.name)}
+                  className="group text-left px-4 py-3 rounded-lg bg-[var(--surface-secondary)] hover:bg-[var(--accent-subtle)] transition-all"
+                >
+                  <div className="text-[13px] font-semibold font-mono text-[var(--text-secondary)] group-hover:text-[var(--accent)] transition-colors">
+                    /{skill.name}
+                  </div>
+                  <div className="text-[11px] text-[var(--text-tertiary)] mt-0.5 leading-relaxed line-clamp-2">
+                    {skill.description || ''}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

@@ -359,6 +359,40 @@ function formatIntentSuggestion(intent) {
   return `Tip: ${cmd} can help with ${label} if that's what you're after.`;
 }
 
+// ── Framework-Aware Detection ───────────────────────────────────────────
+
+const { detectFramework, formatFrameworkSuggestion } = require('./frameworks');
+
+/**
+ * Detect the best match across both skills and interactive frameworks.
+ * Frameworks take priority when their confidence >= 0.75 and the skill
+ * match confidence is below 0.8, because frameworks provide a richer
+ * interactive experience than a simple skill redirect.
+ *
+ * @param {string} userMessage - Raw user input
+ * @returns {{ type: 'skill'|'framework', result: object } | null}
+ */
+function detectBestIntent(userMessage) {
+  const skillIntent = detectIntent(userMessage);
+  const fwIntent = detectFramework(userMessage);
+
+  if (!skillIntent && !fwIntent) return null;
+
+  // If only one matched, return it
+  if (!fwIntent) return { type: 'skill', result: skillIntent };
+  if (!skillIntent) return { type: 'framework', result: fwIntent };
+
+  // Both matched — framework wins if it's confident enough and the skill
+  // match isn't strongly beating it (skill at 0.8+ usually means an
+  // explicit phrase match like "write a PRD")
+  if (fwIntent.confidence >= 0.75 && skillIntent.confidence < 0.8) {
+    return { type: 'framework', result: fwIntent };
+  }
+
+  // Otherwise skill wins (it maps to a dedicated, richer skill file)
+  return { type: 'skill', result: skillIntent };
+}
+
 // ── Exports ──────────────────────────────────────────────────────────────
 
-module.exports = { detectIntent, formatIntentSuggestion };
+module.exports = { detectIntent, formatIntentSuggestion, detectBestIntent, detectFramework, formatFrameworkSuggestion };

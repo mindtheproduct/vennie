@@ -280,36 +280,207 @@ function renderInline(text) {
   return result;
 }
 
-// ── Tool Display ────────────────────────────────────────────────────────────
+// ── Tool Display (Rich Cards) ──────────────────────────────────────────────
 
-function renderToolStart(name, input) {
+const TIER_ICONS = {
+  auto: `${fg.dimBlue}●${style.reset}`,
+  confirm: `${fg.yellow}◆${style.reset}`,
+  approve: `${fg.red}▲${style.reset}`,
+};
+
+function renderToolStart(name, input, meta = {}) {
+  if (name === 'AskUser') return;
+
   const summaries = {
     Read: () => `Reading ${shortenPath(input.file_path)}`,
     Write: () => `Writing ${shortenPath(input.file_path)}`,
     Edit: () => `Editing ${shortenPath(input.file_path)}`,
-    Bash: () => `Running: ${(input.command || '').slice(0, 50)}${(input.command || '').length > 50 ? '…' : ''}`,
+    Bash: () => `Running: ${(input.command || '').slice(0, 60)}${(input.command || '').length > 60 ? '…' : ''}`,
     Glob: () => `Searching for ${input.pattern}`,
     Grep: () => `Searching for "${(input.pattern || '').slice(0, 30)}"`,
     WebFetch: () => `Fetching ${(input.url || '').slice(0, 40)}`,
     WebSearch: () => `Searching the web`,
-    AskUser: () => '',
   };
 
-  const summary = (summaries[name] || (() => `${name}`))();
-  if (summary) {
-    process.stdout.write(`${PAD}${PAD}${fg.dimBlue}⚡ ${summary}${style.reset}\n`);
+  const summary = (summaries[name] || (() => name))();
+  const tierIcon = TIER_ICONS[meta.tier] || TIER_ICONS.auto;
+  const progress = meta.total > 1 ? ` ${fg.dimBlue}[${meta.index + 1}/${meta.total}]${style.reset}` : '';
+
+  process.stdout.write(`${PAD}  ${tierIcon} ${fg.skyBlue}${name}${style.reset} ${fg.dimBlue}${summary}${style.reset}${progress}\n`);
+}
+
+function renderToolResult(name, result, success, meta = {}) {
+  if (name === 'AskUser') return;
+
+  const duration = meta.duration ? `${fg.dimBlue} ${meta.duration}ms${style.reset}` : '';
+  const tokens = meta.resultTokens ? `${fg.dimBlue} · ~${(meta.resultTokens / 1000).toFixed(1)}k tokens${style.reset}` : '';
+
+  if (success) {
+    process.stdout.write(`${PAD}  ${fg.accentBlue}✓${style.reset} ${fg.dimBlue}${name}${duration}${tokens}${style.reset}\n`);
+
+    // Show preview if available
+    if (meta.preview) {
+      const previewLines = meta.preview.split('\n').slice(0, 3);
+      for (const line of previewLines) {
+        process.stdout.write(`${PAD}    ${fg.grey}${line.slice(0, CONTENT_WIDTH() - 6)}${style.reset}\n`);
+      }
+    }
+  } else {
+    const errMsg = typeof result === 'string' ? result : (result?.error || 'Unknown error');
+    process.stdout.write(`${PAD}  ${fg.red}✗ ${name}: ${errMsg.slice(0, 80)}${duration}${style.reset}\n`);
   }
 }
 
-function renderToolResult(name, result, success) {
-  if (name === 'AskUser') return;
+// ── Turn Progress ────────────────────────────────────────────────────────
 
-  if (success) {
-    process.stdout.write(`${PAD}${PAD}${fg.accentBlue}✓${style.reset} ${fg.dimBlue}${name} done${style.reset}\n`);
-  } else {
-    const errMsg = typeof result === 'string' ? result : (result?.error || 'Unknown error');
-    process.stdout.write(`${PAD}${PAD}${fg.red}✗ ${name}: ${errMsg}${style.reset}\n`);
+function renderTurnProgress(turn, maxTurns, toolCount) {
+  const bar = `${fg.dimBlue}─── step ${turn}/${maxTurns}`;
+  const tools = toolCount > 1 ? ` (${toolCount} tools)` : '';
+  process.stdout.write(`${PAD}${bar}${tools} ${'─'.repeat(Math.max(0, CONTENT_WIDTH() - 20 - tools.length))}${style.reset}\n`);
+}
+
+// ── Checkpoint ──────────────────────────────────────────────────────────
+
+function renderCheckpoint(message) {
+  process.stdout.write(`\n${PAD}${fg.skyBlue}◎${style.reset} ${fg.dimBlue}${message}${style.reset}\n\n`);
+}
+
+// ── Citations ───────────────────────────────────────────────────────────
+
+function renderCitations(sources) {
+  if (!sources || sources.length === 0) return;
+
+  process.stdout.write(`\n${PAD}${fg.dimBlue}${'─'.repeat(Math.min(40, CONTENT_WIDTH()))}${style.reset}\n`);
+  process.stdout.write(`${PAD}${fg.dimBlue}Sources:${style.reset}\n`);
+
+  for (let i = 0; i < sources.length; i++) {
+    const s = sources[i];
+    const num = `[${i + 1}]`;
+    let label = '';
+    switch (s.type) {
+      case 'file':
+        label = `${s.filename} (${s.lines})`;
+        break;
+      case 'search':
+        label = `Search: "${s.pattern}" (${s.matchCount} matches in ${s.files.length} files)`;
+        break;
+      case 'glob':
+        label = `${s.fileCount} files matching ${s.pattern}`;
+        break;
+      default:
+        label = s.type;
+    }
+    process.stdout.write(`${PAD}  ${fg.dimBlue}${num}${style.reset} ${fg.grey}${label}${style.reset}\n`);
   }
+}
+
+// ── Thinking Display ────────────────────────────────────────────────────
+
+function renderThinkingBlock(text, { collapsed = true } = {}) {
+  const maxShow = collapsed ? 200 : text.length;
+  const display = text.slice(0, maxShow);
+  const truncated = text.length > maxShow;
+
+  process.stdout.write(`\n${PAD}${fg.dimBlue}┌─ thinking ─${style.reset}\n`);
+
+  const lines = display.split('\n');
+  for (const line of lines) {
+    const wrapped = wordWrap(line, CONTENT_WIDTH() - 4);
+    for (const wl of wrapped) {
+      process.stdout.write(`${PAD}${fg.dimBlue}│${style.reset} ${style.dim}${fg.grey}${wl}${style.reset}\n`);
+    }
+  }
+
+  if (truncated) {
+    process.stdout.write(`${PAD}${fg.dimBlue}│ ... (${text.length} chars total)${style.reset}\n`);
+  }
+  process.stdout.write(`${PAD}${fg.dimBlue}└${'─'.repeat(Math.min(40, CONTENT_WIDTH() - 2))}${style.reset}\n\n`);
+}
+
+// ── Permission Prompt ───────────────────────────────────────────────────
+
+function renderPermissionPrompt(description, tier) {
+  const icon = tier === 'approve' ? `${fg.red}▲` : `${fg.yellow}◆`;
+  const options = tier === 'approve' ? 'Y/n/always/never' : 'Y/n/always';
+
+  process.stdout.write(`\n${PAD}${icon} ${style.bold}Permission required${style.reset}\n`);
+  process.stdout.write(`${PAD}  ${fg.grey}${description}${style.reset}\n`);
+  process.stdout.write(`${PAD}  ${fg.dimBlue}[${options}]${style.reset} `);
+}
+
+// ── Status Line ─────────────────────────────────────────────────────────
+
+let statusLineEnabled = false;
+let statusLineData = {};
+
+function enableStatusLine() {
+  statusLineEnabled = true;
+}
+
+function updateStatusLine(data) {
+  statusLineData = { ...statusLineData, ...data };
+  if (!statusLineEnabled) return;
+  drawStatusLine();
+}
+
+function drawStatusLine() {
+  const cols = COLS();
+  const parts = [];
+
+  if (statusLineData.model) {
+    const shortModel = statusLineData.model
+      .replace('claude-', '')
+      .replace('-20250514', '')
+      .replace('-4-6', ' 4.6')
+      .replace('-4-5-20251001', ' 4.5');
+    parts.push(`${fg.cyan}${shortModel}${style.reset}`);
+  }
+
+  if (statusLineData.toolCount) {
+    parts.push(`${fg.dimBlue}${statusLineData.toolCount} tools${style.reset}`);
+  }
+
+  if (statusLineData.cost !== undefined && statusLineData.cost > 0) {
+    parts.push(`${fg.dimBlue}$${statusLineData.cost.toFixed(4)}${style.reset}`);
+  }
+
+  if (statusLineData.inputTokens) {
+    const inK = (statusLineData.inputTokens / 1000).toFixed(1);
+    const outK = ((statusLineData.outputTokens || 0) / 1000).toFixed(1);
+    parts.push(`${fg.dimBlue}${inK}k↑ ${outK}k↓${style.reset}`);
+  }
+
+  if (statusLineData.sessionTime) {
+    const mins = Math.floor(statusLineData.sessionTime / 60000);
+    parts.push(`${fg.dimBlue}${mins}m${style.reset}`);
+  }
+
+  if (statusLineData.vaultPath) {
+    parts.push(`${fg.dimBlue}${shortenPath(statusLineData.vaultPath)}${style.reset}`);
+  }
+
+  const sep = `${fg.dimBlue} │ ${style.reset}`;
+  const line = parts.join(sep);
+
+  // Write to bottom of terminal: save cursor, move to last row, write, restore
+  process.stdout.write(`\x1b7\x1b[${process.stdout.rows || 24};0H\x1b[K ${line}\x1b8`);
+}
+
+function clearStatusLine() {
+  if (!statusLineEnabled) return;
+  statusLineEnabled = false;
+  process.stdout.write(`\x1b7\x1b[${process.stdout.rows || 24};0H\x1b[K\x1b8`);
+}
+
+// ── Error Recovery ──────────────────────────────────────────────────────
+
+function renderRetryPrompt(toolName, errorMessage) {
+  process.stdout.write(`\n${PAD}${fg.red}✗ ${toolName} failed:${style.reset} ${fg.grey}${errorMessage.slice(0, 60)}${style.reset}\n`);
+  process.stdout.write(`${PAD}  ${fg.dimBlue}Retry? [Y/n]${style.reset} `);
+}
+
+function renderFallbackNotice(from, to) {
+  process.stdout.write(`${PAD}  ${fg.dimBlue}↪ ${from} unavailable, using ${to} instead${style.reset}\n`);
 }
 
 // ── Status & Chrome ─────────────────────────────────────────────────────────
@@ -597,6 +768,21 @@ module.exports = {
   // Tools
   renderToolStart,
   renderToolResult,
+  renderTurnProgress,
+  renderCheckpoint,
+  // Citations
+  renderCitations,
+  // Thinking
+  renderThinkingBlock,
+  // Permissions
+  renderPermissionPrompt,
+  // Status line
+  enableStatusLine,
+  updateStatusLine,
+  clearStatusLine,
+  // Error recovery
+  renderRetryPrompt,
+  renderFallbackNotice,
   // Chrome
   renderWelcome,
   renderPrompt,

@@ -1,79 +1,13 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..700&display=swap" rel="stylesheet" />
   <title>Vennie</title>
-  <style>
-    /* CSS reset + base dark theme */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg-primary: #0f0f1a;
-      --bg-secondary: #161625;
-      --bg-tertiary: #1c1c30;
-      --bg-hover: #22223a;
-      --bg-active: #2a2a45;
-      --border: #2a2a40;
-      --border-subtle: #1f1f35;
-      --text-primary: #e4e4e4;
-      --text-secondary: #9898b0;
-      --text-dim: #6c6c8a;
-      --cyan: #00d7d7;
-      --cyan-dim: #00a0a0;
-      --accent-blue: #5fafff;
-      --sky-blue: #87d7ff;
-      --green: #87d787;
-      --yellow: #d7d75f;
-      --red: #ff6b6b;
-      --purple: #d787ff;
-      --font-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
-      --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
-      --radius-sm: 6px;
-      --radius-md: 10px;
-      --radius-lg: 14px;
-      --shadow: 0 4px 24px rgba(0,0,0,0.3);
-    }
-
-    html, body, #root {
-      height: 100%;
-      width: 100%;
-      overflow: hidden;
-      background: var(--bg-primary);
-      color: var(--text-primary);
-      font-family: var(--font-sans);
-      font-size: 14px;
-      line-height: 1.5;
-      -webkit-font-smoothing: antialiased;
-    }
-
-    /* Draggable title bar region */
-    .titlebar {
-      -webkit-app-region: drag;
-      height: 48px;
-      display: flex;
-      align-items: center;
-      padding: 0 80px 0 16px; /* space for traffic lights */
-      border-bottom: 1px solid var(--border-subtle);
-      background: var(--bg-secondary);
-      user-select: none;
-    }
-    .titlebar * { -webkit-app-region: no-drag; }
-
-    /* Scrollbar styling */
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
-
-    /* Transition helpers */
-    .fade-in { animation: fadeIn 0.2s ease-out; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-
-    /* Selection */
-    ::selection { background: rgba(0, 215, 215, 0.2); }
-  </style>
 </head>
 <body>
   <div id="root"></div>

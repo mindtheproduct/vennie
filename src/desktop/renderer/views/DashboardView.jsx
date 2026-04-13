@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { Calendar, Users, FolderKanban, MessageSquare, Zap, BookOpen, FileText } from 'lucide-react';
+import { cn } from '../lib/utils.js';
 import MarkdownRenderer from '../components/MarkdownRenderer.jsx';
 
 export default function DashboardView({ appData, onNavigate }) {
   const [brief, setBrief] = useState(appData?.morningBrief || null);
   const [pulse, setPulse] = useState(appData?.pulse || null);
   const [loading, setLoading] = useState(!brief);
-  const e = React.createElement;
 
   useEffect(() => {
     if (!brief) {
@@ -23,139 +24,102 @@ export default function DashboardView({ appData, onNavigate }) {
 
   const now = new Date();
   const hour = now.getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const greeting = hour < 12 ? 'Morning' : hour < 17 ? 'Afternoon' : 'Evening';
+  const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
-  return e('div', {
-    style: {
-      flex: 1,
-      overflow: 'auto',
-      padding: '32px 40px',
-      maxWidth: 900,
-    }
-  },
-    // Header
-    e('div', { style: { marginBottom: 32 } },
-      e('h1', {
-        style: { fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }
-      }, `${greeting}.`),
-      e('p', {
-        style: { color: 'var(--text-dim)', fontSize: 14 }
-      }, new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })),
-    ),
+  function runSkill(name) {
+    onNavigate('chat');
+    setTimeout(() => window.dispatchEvent(new CustomEvent('vennie:run-skill', { detail: name })), 100);
+  }
 
-    // Quick actions
-    e('div', {
-      style: { display: 'flex', gap: 12, marginBottom: 32, flexWrap: 'wrap' }
-    },
-      quickAction(e, 'Start daily plan', '/daily-plan', 'var(--cyan)', () => {
-        onNavigate('chat');
-        setTimeout(() => window.dispatchEvent(new CustomEvent('vennie:run-skill', { detail: 'daily-plan' })), 100);
-      }),
-      quickAction(e, 'Product gym', '/gym', 'var(--accent-blue)', () => {
-        onNavigate('chat');
-        setTimeout(() => window.dispatchEvent(new CustomEvent('vennie:run-skill', { detail: 'gym' })), 100);
-      }),
-      quickAction(e, 'Quick log', '/log', 'var(--green)', () => {
-        onNavigate('chat');
-        setTimeout(() => document.querySelector('textarea')?.focus(), 100);
-      }),
-      quickAction(e, 'Browse vault', null, 'var(--yellow)', () => onNavigate('vault')),
-    ),
+  return (
+    <div className="flex-1 overflow-auto bg-[var(--surface-primary)]">
+      <div className="max-w-[760px] mx-auto px-8 py-8">
+        {/* Header — bold, simple */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-[var(--text-primary)] tracking-tight">{greeting}.</h1>
+          <p className="text-sm text-[var(--text-tertiary)] mt-1 font-mono">{dateStr}</p>
+        </div>
 
-    // Two-column layout
-    e('div', {
-      style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }
-    },
-      // Morning Brief
-      e('div', {
-        style: {
-          gridColumn: '1 / -1',
-          background: 'var(--bg-secondary)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-lg)',
-          padding: '24px',
-        }
-      },
-        e('h2', {
-          style: { fontSize: 16, fontWeight: 600, color: 'var(--cyan)', marginBottom: 16 }
-        }, 'Morning Brief'),
-        loading
-          ? e('p', { style: { color: 'var(--text-dim)' } }, 'Loading...')
-          : brief?.display
-            ? e(MarkdownRenderer, { text: brief.display })
-            : e('p', { style: { color: 'var(--text-dim)' } }, 'No brief available. Use Vennie for a few days to build up vault data.'),
-      ),
+        {/* Quick Actions — ghost buttons */}
+        <div className="flex gap-2 mb-8">
+          {[
+            { label: 'Plan my day', skill: 'daily-plan', icon: Calendar },
+            { label: 'Product gym', skill: 'gym', icon: Zap },
+            { label: 'Quick log', skill: 'log', icon: FileText },
+            { label: 'Vault', action: () => onNavigate('vault'), icon: FolderKanban },
+          ].map((action, i) => {
+            const Icon = action.icon;
+            return (
+              <button
+                key={i}
+                onClick={() => action.skill ? runSkill(action.skill) : action.action?.()}
+                className="group flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[var(--surface-secondary)] hover:bg-[var(--accent-subtle)] transition-all text-sm"
+              >
+                <Icon size={14} className="text-[var(--text-tertiary)] group-hover:text-[var(--accent)] transition-colors" />
+                <span className="text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] font-medium transition-colors">{action.label}</span>
+              </button>
+            );
+          })}
+        </div>
 
-      // Vault Pulse
-      e('div', {
-        style: {
-          background: 'var(--bg-secondary)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-lg)',
-          padding: '24px',
-        }
-      },
-        e('h2', {
-          style: { fontSize: 16, fontWeight: 600, color: 'var(--accent-blue)', marginBottom: 16 }
-        }, 'Vault Pulse'),
-        pulse ? e('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
-          statRow(e, 'People', pulse.stats?.people ?? 0),
-          statRow(e, 'Projects', pulse.stats?.projects ?? 0),
-          statRow(e, 'Decisions', pulse.stats?.decisions ?? 0),
-          statRow(e, 'Meetings', pulse.stats?.meetings ?? 0),
-          statRow(e, 'Sessions', pulse.stats?.sessions ?? 0),
-        ) : e('p', { style: { color: 'var(--text-dim)' } }, 'No vault data yet.'),
-      ),
+        {/* Brief — surface card, no visible border */}
+        <div className="surface-card p-6 mb-5">
+          <h2 className="text-[11px] font-semibold text-[var(--accent)] uppercase tracking-widest mb-4">Morning Brief</h2>
+          {loading ? (
+            <div className="space-y-3">
+              <div className="shimmer h-4 rounded-md w-3/4" />
+              <div className="shimmer h-4 rounded-md w-1/2" />
+              <div className="shimmer h-4 rounded-md w-2/3" />
+            </div>
+          ) : brief?.display ? (
+            <div className="text-sm"><MarkdownRenderer text={brief.display} /></div>
+          ) : (
+            <p className="text-sm text-[var(--text-tertiary)]">No brief yet. Use Vennie for a few days to build context.</p>
+          )}
+        </div>
 
-      // Session Info
-      e('div', {
-        style: {
-          background: 'var(--bg-secondary)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-lg)',
-          padding: '24px',
-        }
-      },
-        e('h2', {
-          style: { fontSize: 16, fontWeight: 600, color: 'var(--green)', marginBottom: 16 }
-        }, 'Session'),
-        e('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
-          statRow(e, 'Model', (appData?.model || '').replace('claude-', '').replace(/-\d{8}$/, '')),
-          statRow(e, 'Tools', appData?.toolCount ?? 0),
-          statRow(e, 'Version', `v${appData?.version || '?'}`),
-        ),
-      ),
-    ),
+        {/* Grid */}
+        <div className="grid grid-cols-2 gap-4">
+          {/* Vault Pulse */}
+          <div className="surface-card p-5">
+            <h2 className="text-[11px] font-semibold text-[var(--text-tertiary)] uppercase tracking-widest mb-4">Vault</h2>
+            {pulse ? (
+              <div className="space-y-3">
+                <StatRow icon={Users} label="People" value={pulse.stats?.people ?? 0} />
+                <StatRow icon={FolderKanban} label="Projects" value={pulse.stats?.projects ?? 0} />
+                <StatRow icon={BookOpen} label="Decisions" value={pulse.stats?.decisions ?? 0} />
+                <StatRow icon={Calendar} label="Meetings" value={pulse.stats?.meetings ?? 0} />
+                <StatRow icon={MessageSquare} label="Sessions" value={pulse.stats?.sessions ?? 0} />
+              </div>
+            ) : (
+              <p className="text-sm text-[var(--text-tertiary)]">No vault data yet.</p>
+            )}
+          </div>
+
+          {/* Session */}
+          <div className="surface-card p-5">
+            <h2 className="text-[11px] font-semibold text-[var(--text-tertiary)] uppercase tracking-widest mb-4">Session</h2>
+            <div className="space-y-3">
+              <StatRow label="Model" value={(appData?.model || '').replace('claude-', '').replace(/-\d{8}$/, '')} />
+              <StatRow label="Tools" value={appData?.toolCount ?? 0} />
+              <StatRow label="Version" value={`v${appData?.version || '?'}`} />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
-function quickAction(e, label, cmd, color, onClick) {
-  return e('button', {
-    onClick,
-    style: {
-      background: 'var(--bg-secondary)',
-      border: '1px solid var(--border)',
-      borderRadius: 'var(--radius-md)',
-      padding: '12px 20px',
-      color: 'var(--text-primary)',
-      cursor: 'pointer',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 4,
-      transition: 'all 0.15s',
-      minWidth: 140,
-    }
-  },
-    e('span', { style: { fontWeight: 600, fontSize: 14 } }, label),
-    cmd && e('span', { style: { color, fontSize: 12, fontFamily: 'var(--font-mono)' } }, cmd),
-  );
-}
-
-function statRow(e, label, value) {
-  return e('div', {
-    style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' }
-  },
-    e('span', { style: { color: 'var(--text-dim)', fontSize: 13 } }, label),
-    e('span', { style: { color: 'var(--text-primary)', fontWeight: 600, fontSize: 14, fontFamily: 'var(--font-mono)' } }, String(value)),
+function StatRow({ icon: Icon, label, value }) {
+  return (
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        {Icon && <Icon size={13} className="text-[var(--text-tertiary)]" />}
+        <span className="text-sm text-[var(--text-secondary)]">{label}</span>
+      </div>
+      <span className="text-sm font-semibold font-mono text-[var(--text-primary)]">{String(value)}</span>
+    </div>
   );
 }

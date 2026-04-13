@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { getTriggerWeights } = require('./feedback-signals');
 
 // ── Suggestion Engine ─────────────────────────────────────────────────────
 // Powers contextual suggestions throughout Vennie:
@@ -338,10 +339,192 @@ function getOnboardingTip(usedCommands) {
   return unused[Math.floor(Math.random() * unused.length)];
 }
 
+// ── Contextual Action Patterns ──────────────────────────────────────────
+// Pattern-matched against response + user message to generate natural-language actions
+
+const CONTEXTUAL_PATTERNS = [
+  {
+    id: 'person-mention',
+    // Matches "Name said", "spoke with Name", "Name mentioned", "meeting with Name", etc.
+    test: (resp, _msg) => {
+      const m = resp.match(/\b([A-Z][a-z]+(?:\s[A-Z][a-z]+)+)\b/g);
+      if (!m) return null;
+      // Filter out common non-person capitalized phrases
+      const ignore = new Set(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+        'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December',
+        'Good Morning', 'Good Afternoon', 'Good Evening', 'Action Items', 'Next Steps', 'Key Points',
+        'Mind The Product', 'Product Manager', 'Daily Plan', 'Week Plan', 'Quarter Goals', 'LinkedIn Post']);
+      const names = [...new Set(m)].filter(n => !ignore.has(n));
+      if (names.length === 0) return null;
+      return { name: names[0] };
+    },
+    actions: (ctx) => [
+      { text: `Pull up ${ctx.name}'s context`, command: `What do I know about ${ctx.name}?` },
+      { text: `Create a page for ${ctx.name}`, command: `Create a person page for ${ctx.name}` },
+    ],
+  },
+  {
+    id: 'meeting',
+    test: (resp, msg) => {
+      const lower = (resp + ' ' + msg).toLowerCase();
+      return /\b(meeting|1:1|one-on-one|standup|sync|check-in|call with|spoke with|met with)\b/.test(lower) ? {} : null;
+    },
+    actions: () => [
+      { text: 'Capture meeting notes', command: 'Help me capture notes from this meeting' },
+      { text: 'Prep for the next one', command: '/meeting-prep' },
+    ],
+  },
+  {
+    id: 'decision',
+    test: (resp, msg) => {
+      const lower = (resp + ' ' + msg).toLowerCase();
+      return /\b(decision|decided|trade-off|chose|choosing|bet on|direction|go with)\b/.test(lower) ? {} : null;
+    },
+    actions: () => [
+      { text: 'Log this decision', command: '/decision' },
+      { text: 'What are the trade-offs?', command: 'What are the trade-offs and risks of this decision?' },
+    ],
+  },
+  {
+    id: 'task',
+    test: (resp, msg) => {
+      const lower = (resp + ' ' + msg).toLowerCase();
+      return /\b(task|todo|to-do|action item|follow.?up|need to|should do|reminder)\b/.test(lower) ? {} : null;
+    },
+    actions: () => [
+      { text: 'Add this to my tasks', command: 'Create a task from what we just discussed' },
+      { text: 'Show my open tasks', command: 'Show me my open tasks' },
+    ],
+  },
+  {
+    id: 'strategy',
+    test: (resp, msg) => {
+      const lower = (resp + ' ' + msg).toLowerCase();
+      return /\b(strategy|strategic|prioriti[sz]|roadmap|competitive|positioning|market|vision)\b/.test(lower) ? {} : null;
+    },
+    actions: () => [
+      { text: 'Run a prioritization exercise', command: '/prioritise' },
+      { text: 'Map the competitive landscape', command: '/landscape' },
+    ],
+  },
+  {
+    id: 'writing',
+    test: (resp, msg) => {
+      const lower = (resp + ' ' + msg).toLowerCase();
+      return /\b(write|draft|post|article|blog|content|linkedin|publish)\b/.test(lower) ? {} : null;
+    },
+    actions: () => [
+      { text: 'Draft a LinkedIn post about this', command: '/linkedin' },
+      { text: 'Write it in my voice', command: 'Draft this in my trained voice' },
+    ],
+  },
+  {
+    id: 'career',
+    test: (resp, msg) => {
+      const lower = (resp + ' ' + msg).toLowerCase();
+      return /\b(career|promotion|achievement|accomplished|shipped|launched|impact|brag|evidence|performance review)\b/.test(lower) ? {} : null;
+    },
+    actions: () => [
+      { text: 'Capture this as evidence', command: 'Capture this as career evidence' },
+      { text: 'Add to my brag doc', command: 'Add this achievement to my brag doc' },
+    ],
+  },
+];
+
+// Vault-state fallback suggestions when no pattern matches
+function _getVaultFallbacks(vaultState) {
+  const fallbacks = [];
+
+  if (vaultState && vaultState.hasUnprocessedMeetings) {
+    fallbacks.push({ text: 'Process your unprocessed meetings', command: '/process-meetings' });
+  }
+  if (vaultState && vaultState.hasTasks) {
+    fallbacks.push({ text: 'Show my priorities', command: 'What should I focus on right now?' });
+  }
+  if (vaultState && !vaultState.hasDailyPlan) {
+    fallbacks.push({ text: 'Plan your day', command: '/daily-plan' });
+  }
+
+  // Always available
+  fallbacks.push({ text: 'What should I work on next?', command: 'Based on my tasks and priorities, what should I work on next?' });
+  fallbacks.push({ text: 'Show me my priorities', command: 'Show me my current priorities and open tasks' });
+
+  return fallbacks;
+}
+
+/**
+ * Generate contextual action suggestions based on response content.
+ * Returns 2-3 natural-language actions that auto-submit when selected.
+ * When a vaultPath is provided, suggestions are weighted by learned feedback signals.
+ *
+ * @param {string} responseText - The AI response just shown
+ * @param {string} userMessage - What the user asked
+ * @param {{ hasUnprocessedMeetings?: boolean, hasTasks?: boolean, hasDailyPlan?: boolean }} vaultState - Current vault state
+ * @param {string} [vaultPath] - Path to vault for feedback weight lookup
+ * @returns {{ text: string, command: string, trigger?: string }[]} Array of 2-3 action suggestions
+ */
+function generateContextualActions(responseText, userMessage, vaultState, vaultPath) {
+  if (!responseText || responseText.length < 40) return [];
+
+  const matched = [];
+  const seenIds = new Set();
+
+  for (const pattern of CONTEXTUAL_PATTERNS) {
+    const ctx = pattern.test(responseText, userMessage || '');
+    if (ctx && !seenIds.has(pattern.id)) {
+      seenIds.add(pattern.id);
+      const actions = pattern.actions(ctx);
+      // Tag each action with its trigger pattern id for feedback tracking
+      for (const a of actions) {
+        a.trigger = pattern.id;
+      }
+      matched.push(...actions);
+    }
+    if (matched.length >= 6) break; // collect more to allow weight-based sorting
+  }
+
+  if (matched.length > 0) {
+    // Deduplicate by command
+    const seen = new Set();
+    let deduped = [];
+    for (const a of matched) {
+      if (!seen.has(a.command)) {
+        seen.add(a.command);
+        deduped.push(a);
+      }
+    }
+
+    // Sort by learned trigger weights (higher weight = more likely to be acted on)
+    if (vaultPath && deduped.length > 3) {
+      try {
+        const weights = getTriggerWeights(vaultPath);
+        if (Object.keys(weights).length > 0) {
+          deduped.sort((a, b) => {
+            const wA = weights[a.trigger] != null ? weights[a.trigger] : 0.3;
+            const wB = weights[b.trigger] != null ? weights[b.trigger] : 0.3;
+            return wB - wA; // Higher weight first
+          });
+        }
+      } catch {
+        // Feedback weights are non-critical
+      }
+    }
+
+    return deduped.slice(0, 3);
+  }
+
+  // Fallback to vault-state suggestions
+  const fallbacks = _getVaultFallbacks(vaultState);
+  // Pick 2 random fallbacks
+  const shuffled = fallbacks.sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, 2);
+}
+
 module.exports = {
   getWelcomeSuggestions,
   getResponseSuggestions,
   getIdleHint,
   getOnboardingTip,
+  generateContextualActions,
   SKILL_CHAINS,
 };

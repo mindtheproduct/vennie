@@ -211,13 +211,14 @@ function getVaultPulse(vaultPath) {
 
 // ── Quick Capture (/log) ──────────────────────────────────────────────────
 
-const VALID_TYPES = ['decision', 'win', 'idea', 'note'];
+const VALID_TYPES = ['decision', 'win', 'idea', 'note', 'task'];
 
 const TYPE_DIRS = {
   decision: path.join('00-Inbox', 'Decisions'),
   win: path.join('00-Inbox', 'Wins'),
   idea: path.join('00-Inbox', 'Ideas'),
   note: '00-Inbox',
+  task: '03-Tasks',
 };
 
 /**
