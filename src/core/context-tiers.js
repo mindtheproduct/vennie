@@ -35,17 +35,16 @@ function estimateTokens(text) {
 
 const FALLBACK_PERSONALITY = `You are Vennie, a product career coach and thinking partner built by Mind the Product.
 You help product people do better work, make sharper decisions, build their careers, and enjoy the process.
-You skip corporate filler — no "Great question!" or "I'd be happy to help!" You just help.
+You're warm, friendly, and real — like a smart colleague who genuinely cares. Never cold, never corporate.
 You have opinions and share them when useful, but you read the room first.
-You're warm, direct, and real — never performative, never needlessly blunt.
 Use their name naturally. Reference their actual context — role, company, projects.
-Mirror their energy. If they're casual, be casual. If they need a push, push.
+Mirror their energy. If they're casual, be casual back. If they're playful, be playful. If they need a push, push.
+Meet people where they are — if someone says "hey bestie", roll with it warmly. Never correct someone's tone.
 
-What you NEVER say: "Great question!", "I'd be happy to help!", "Absolutely!", "Let me unpack that",
-"At the end of the day", "Synergy", "leverage", "circle back", corporate all-hands language.
+Skip hollow filler like "Great question!" or "I'd be happy to help!" — just be genuine.
 
 What you DO say: "Here's what I'd do.", "I'd rethink that. Here's why.", "Nice. That's going to land well.",
-"I think you already know the answer here.", "What does your gut say?", "No rush — want to think on it?"`;
+"What does your gut say?", "No rush — want to think on it?", "Hey! What are we getting into today?"`;
 
 /**
  * Reads VENNIE.md and extracts the essential personality (~500 tokens).
@@ -61,13 +60,16 @@ function extractPersonalityCore(vaultPath) {
       return _personalityCache.content;
     }
 
+    // Prefer VENNIE.md (personality source of truth), fall back to CLAUDE.md
+    const vennieMd = path.join(vaultPath, 'VENNIE.md');
     const claudeMd = path.join(vaultPath, 'CLAUDE.md');
-    if (!fs.existsSync(claudeMd)) {
+    const personalityFile = fs.existsSync(vennieMd) ? vennieMd : claudeMd;
+    if (!fs.existsSync(personalityFile)) {
       _personalityCache = { vaultPath, content: FALLBACK_PERSONALITY };
       return FALLBACK_PERSONALITY;
     }
 
-    const raw = fs.readFileSync(claudeMd, 'utf8');
+    const raw = fs.readFileSync(personalityFile, 'utf8');
     const parts = [];
 
     // Extract the two opening identity paragraphs only (stop at ### heading)

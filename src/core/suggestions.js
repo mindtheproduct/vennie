@@ -170,11 +170,23 @@ function getWelcomeSuggestions(vaultPath) {
   const today = now.toISOString().split('T')[0];
   const dayName = now.toLocaleDateString('en-US', { weekday: 'long' });
 
-  // Time-based greeting
+  // Read user name from profile
+  let userName = '';
+  try {
+    const profilePath = path.join(vaultPath, 'System', 'user-profile.yaml');
+    if (fs.existsSync(profilePath)) {
+      const profile = fs.readFileSync(profilePath, 'utf8');
+      const nameMatch = profile.match(/^name:\s*["']?(.+?)["']?\s*$/m);
+      if (nameMatch) userName = nameMatch[1].split(' ')[0]; // First name only
+    }
+  } catch {}
+
+  // Personalised time-based greeting
+  const name = userName || '';
   let greeting;
-  if (hour < 12) greeting = 'Good morning';
-  else if (hour < 17) greeting = 'Good afternoon';
-  else greeting = 'Good evening';
+  if (hour < 12) greeting = name ? `Good morning, ${name}` : 'Good morning';
+  else if (hour < 17) greeting = name ? `Good afternoon, ${name}` : 'Good afternoon';
+  else greeting = name ? `Good evening, ${name}` : 'Good evening';
 
   const suggestions = [];
 
@@ -185,7 +197,11 @@ function getWelcomeSuggestions(vaultPath) {
   ];
   const hasDailyPlan = dailyPlanPaths.some(p => fs.existsSync(p));
   if (!hasDailyPlan) {
-    suggestions.push({ cmd: '/daily-plan', reason: 'you haven\'t planned today yet' });
+    if (hour < 12) {
+      suggestions.push({ cmd: '/daily-plan', reason: 'Plan your day before it plans you' });
+    } else {
+      suggestions.push({ cmd: '/daily-plan', reason: 'It\'s not too late to set intentions' });
+    }
   }
 
   // Count unprocessed meetings
@@ -200,37 +216,71 @@ function getWelcomeSuggestions(vaultPath) {
   if (unprocessedCount > 0) {
     suggestions.push({
       cmd: '/process-meetings',
-      reason: `${unprocessedCount} unprocessed meeting${unprocessedCount > 1 ? 's' : ''} in inbox`,
+      reason: `${unprocessedCount} meeting${unprocessedCount > 1 ? 's' : ''} to extract insights from`,
     });
   }
 
   // Day-specific suggestions
   if (dayName === 'Monday') {
-    suggestions.push({ cmd: '/week-plan', reason: 'start the week with priorities' });
+    suggestions.push({ cmd: '/week-plan', reason: 'Set the tone for the week' });
   } else if (dayName === 'Friday') {
-    suggestions.push({ cmd: '/weekly-review', reason: 'reflect on the week before it ends' });
+    suggestions.push({ cmd: '/weekly-review', reason: 'Capture wins before the weekend' });
   }
 
-  // Check if voice is trained
-  const voicePath = path.join(vaultPath, 'System', 'voice.yaml');
-  if (fs.existsSync(voicePath)) {
+  // Check for open tasks
+  const tasksPath = path.join(vaultPath, '03-Tasks', 'Tasks.md');
+  let openTasks = 0;
+  if (fs.existsSync(tasksPath) && suggestions.length < 4) {
     try {
-      const content = fs.readFileSync(voicePath, 'utf8');
-      const confMatch = content.match(/confidence:\s*([\d.]+)/);
-      if (confMatch && parseFloat(confMatch[1]) < 0.4) {
-        suggestions.push({ cmd: '/voice train', reason: 'boost your voice calibration' });
+      const content = fs.readFileSync(tasksPath, 'utf8');
+      openTasks = (content.match(/^- \[ \]/gm) || []).length;
+      if (openTasks > 0) {
+        suggestions.push({ cmd: 'What should I focus on right now?', reason: `${openTasks} open task${openTasks > 1 ? 's' : ''} — let\'s prioritise` });
       }
     } catch {}
   }
 
-  // Always have at least one suggestion
-  if (suggestions.length === 0) {
-    suggestions.push({ cmd: '/coach', reason: 'career check-in' });
-    suggestions.push({ cmd: '/news', reason: 'today\'s product/AI signal' });
+  // Afternoon/evening — review instead of plan
+  if (hour >= 16 && suggestions.length < 4) {
+    suggestions.push({ cmd: '/daily-review', reason: 'Reflect on what you shipped today' });
   }
 
-  // Cap at 3
-  return { greeting, suggestions: suggestions.slice(0, 3) };
+  // Check if voice is trained (low-priority, fill slot)
+  if (suggestions.length < 4) {
+    const voicePath = path.join(vaultPath, 'System', 'voice.yaml');
+    if (fs.existsSync(voicePath)) {
+      try {
+        const content = fs.readFileSync(voicePath, 'utf8');
+        const confMatch = content.match(/confidence:\s*([\d.]+)/);
+        if (confMatch && parseFloat(confMatch[1]) < 0.4) {
+          suggestions.push({ cmd: '/voice train', reason: 'Sharpen your writing voice' });
+        }
+      } catch {}
+    }
+  }
+
+  // Fill remaining slots with contextual suggestions
+  const fillers = [
+    { cmd: 'Help me think through a decision', reason: 'Structured thinking partner' },
+    { cmd: '/coach', reason: 'Career sparring session' },
+    { cmd: '/meeting-prep', reason: 'Prep for your next meeting' },
+    { cmd: '/linkedin', reason: 'Draft a post in your voice' },
+    { cmd: '/landscape', reason: 'Map the competitive landscape' },
+    { cmd: 'What happened this week?', reason: 'Quick context refresh' },
+  ];
+  // Deterministic-ish daily rotation so they don't repeat
+  const dayIndex = parseInt(today.replace(/-/g, ''), 10);
+  while (suggestions.length < 4) {
+    const pick = fillers[(dayIndex + suggestions.length) % fillers.length];
+    if (!suggestions.some(s => s.cmd === pick.cmd)) {
+      suggestions.push(pick);
+    } else {
+      break;
+    }
+  }
+
+  // Cap at 4
+  return { greeting, suggestions: suggestions.slice(0, 4) };
 }
 
 /**

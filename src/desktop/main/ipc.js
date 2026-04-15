@@ -1,6 +1,6 @@
 'use strict';
 
-const { ipcMain, BrowserWindow } = require('electron');
+const { ipcMain, BrowserWindow, dialog } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
@@ -98,10 +98,10 @@ async function setupIPC(vaultPath, version) {
 
   // ── Agent communication ───────────────────────────────────────────────
 
-  ipcMain.handle('agent:send', async (event, { message }) => {
+  ipcMain.handle('agent:send', async (event, { message, attachments }) => {
     const sender = event.sender;
     const trimmed = message.trim();
-    if (!trimmed) return { handled: false };
+    if (!trimmed && (!attachments || attachments.length === 0)) return { handled: false };
 
     // Handle AskUser responses
     if (askUserResolve) {
@@ -143,7 +143,27 @@ async function setupIPC(vaultPath, version) {
       }
     }
 
-    messagesRef.push({ role: 'user', content: userContent });
+    // Build multimodal content if attachments present
+    if (attachments && attachments.length > 0) {
+      const contentBlocks = [];
+      for (const att of attachments) {
+        if (att.type === 'image' && att.data) {
+          contentBlocks.push({
+            type: 'image',
+            source: { type: 'base64', media_type: att.mediaType, data: att.data },
+          });
+        } else if (att.type === 'document' && att.content) {
+          contentBlocks.push({
+            type: 'text',
+            text: `[Attached file: ${att.fileName}]\n\n${att.content}`,
+          });
+        }
+      }
+      contentBlocks.push({ type: 'text', text: userContent || 'Please review the attached files.' });
+      messagesRef.push({ role: 'user', content: contentBlocks });
+    } else {
+      messagesRef.push({ role: 'user', content: userContent });
+    }
     let systemPrompt = buildSystemPrompt(vaultPath, personaRef);
 
     // Inject @file content
@@ -169,11 +189,19 @@ async function setupIPC(vaultPath, version) {
     }
 
     // Auto-context injection
+    let contextSummary = null;
     if (shouldInjectContext(trimmed)) {
       try {
         const ctx = gatherContext(vaultPath, trimmed);
         const ctxBlock = formatContextBlock(ctx);
         if (ctxBlock) systemPrompt += `\n\n${ctxBlock}`;
+        // Build context summary for UI
+        const parts = [];
+        if (ctx.people?.length) parts.push(`${ctx.people.length} person page${ctx.people.length > 1 ? 's' : ''}`);
+        if (ctx.projects?.length) parts.push(`${ctx.projects.length} project${ctx.projects.length > 1 ? 's' : ''}`);
+        if (ctx.relatedNotes?.length) parts.push(`${ctx.relatedNotes.length} meeting note${ctx.relatedNotes.length > 1 ? 's' : ''}`);
+        if (ctx.decisions?.length) parts.push(`${ctx.decisions.length} decision${ctx.decisions.length > 1 ? 's' : ''}`);
+        if (parts.length) contextSummary = parts;
       } catch {}
     }
 
@@ -202,7 +230,16 @@ async function setupIPC(vaultPath, version) {
     }
     abortController = new AbortController();
 
+    // Emit context summary to renderer
+    if (contextSummary) {
+      sender.send('agent:event', { type: 'context_loaded', sources: contextSummary });
+    }
+    if (fileRefs.files.length > 0) {
+      sender.send('agent:event', { type: 'context_loaded', sources: [`${fileRefs.files.length} referenced file${fileRefs.files.length > 1 ? 's' : ''}`] });
+    }
+
     // Run agent loop and stream events to renderer
+    let responseText = '';
     try {
       const stream = agentLoop(messagesRef, toolsRef, systemPrompt, {
         executeTool: execTool,
@@ -213,6 +250,11 @@ async function setupIPC(vaultPath, version) {
         if (abortController.signal.aborted) break;
         sender.send('agent:event', agentEvent);
 
+        // Accumulate response text for suggestions
+        if (agentEvent.type === 'text_delta') {
+          responseText += agentEvent.text;
+        }
+
         // Track cost
         if (agentEvent.type === 'usage') {
           costRef.input += agentEvent.inputTokens;
@@ -220,10 +262,10 @@ async function setupIPC(vaultPath, version) {
           costRef.cost += agentEvent.cost;
         }
 
-        // Post-response suggestions after skills
-        if (agentEvent.type === 'done' && lastSkillRef) {
+        // Post-response suggestions (always, not just after skills)
+        if (agentEvent.type === 'done') {
           interactionCount++;
-          const suggestions = getResponseSuggestions(agentEvent.responseText || '', lastSkillRef, usedCommands);
+          const suggestions = getResponseSuggestions(responseText, lastSkillRef, usedCommands);
           if (suggestions.length > 0) {
             sender.send('agent:event', { type: 'suggestions', items: suggestions });
           }
@@ -338,6 +380,22 @@ async function setupIPC(vaultPath, version) {
     return { active: personaRef };
   });
 
+  ipcMain.handle('persona:registry', async () => {
+    return getPersonaRegistry(vaultPath);
+  });
+
+  ipcMain.handle('persona:install', async (_event, { id }) => {
+    return installPersonaFromRegistry(vaultPath, id);
+  });
+
+  ipcMain.handle('persona:uninstall', async (_event, { id }) => {
+    return uninstallPersona(vaultPath, id);
+  });
+
+  ipcMain.handle('persona:detail', async (_event, { id }) => {
+    return getPersonaDetail(vaultPath, id);
+  });
+
   // ── Settings ──────────────────────────────────────────────────────────
 
   ipcMain.handle('settings:get', async () => {
@@ -442,6 +500,90 @@ async function setupIPC(vaultPath, version) {
     }
   });
 
+  // ── Git / Time Machine ──────────────────────────────────────────────
+
+  ipcMain.handle('git:log', async () => {
+    try {
+      const { execSync } = require('child_process');
+      const raw = execSync(
+        'git log --pretty=format:"%H||%ad||%s||%an" --date=short -50 --numstat',
+        { cwd: vaultPath, encoding: 'utf8', timeout: 5000 }
+      );
+      const commits = [];
+      let current = null;
+      for (const line of raw.split('\n')) {
+        const match = line.match(/^([a-f0-9]{40})\|\|(.+?)\|\|(.+?)\|\|(.+)$/);
+        if (match) {
+          if (current) commits.push(current);
+          current = { hash: match[1], date: match[2], message: match[3], author: match[4], filesChanged: 0 };
+        } else if (current && line.trim()) {
+          const numstat = line.match(/^\d+\s+\d+\s+/);
+          if (numstat) current.filesChanged++;
+        }
+      }
+      if (current) commits.push(current);
+      return commits;
+    } catch {
+      return [];
+    }
+  });
+
+  ipcMain.handle('git:diff', async (_event, { hash }) => {
+    try {
+      const { execSync } = require('child_process');
+      const raw = execSync(
+        `git diff ${hash}~1..${hash} --no-color`,
+        { cwd: vaultPath, encoding: 'utf8', timeout: 10000, maxBuffer: 1024 * 1024 }
+      );
+      const files = [];
+      let currentFile = null;
+      for (const line of raw.split('\n')) {
+        if (line.startsWith('diff --git')) {
+          if (currentFile) files.push(currentFile);
+          const pathMatch = line.match(/b\/(.+)$/);
+          currentFile = { path: pathMatch?.[1] || '?', additions: 0, deletions: 0, lines: [] };
+        } else if (currentFile) {
+          if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('index') || line.startsWith('@@')) continue;
+          if (line.startsWith('+')) {
+            currentFile.additions++;
+            currentFile.lines.push({ type: 'add', content: line.slice(1) });
+          } else if (line.startsWith('-')) {
+            currentFile.deletions++;
+            currentFile.lines.push({ type: 'remove', content: line.slice(1) });
+          } else {
+            currentFile.lines.push({ type: 'context', content: line.slice(1) || line });
+          }
+        }
+      }
+      if (currentFile) files.push(currentFile);
+      // Limit lines per file to avoid huge payloads
+      for (const f of files) { if (f.lines.length > 100) f.lines = f.lines.slice(0, 100); }
+      return { files };
+    } catch {
+      return { files: [] };
+    }
+  });
+
+  // ── Notifications ─────────────────────────────────────────────────────
+
+  ipcMain.handle('notifications:getPrefs', async () => {
+    try {
+      const { getPrefs } = require('./notification-prefs.js');
+      return getPrefs();
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('notifications:setPrefs', async (_event, { prefs }) => {
+    try {
+      const { updatePrefs } = require('./notification-prefs.js');
+      return updatePrefs(prefs);
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
   // ── Session management ────────────────────────────────────────────────
 
   ipcMain.handle('session:save', async () => {
@@ -461,6 +603,172 @@ async function setupIPC(vaultPath, version) {
     messagesRef = [];
     costRef = { input: 0, output: 0, cost: 0 };
     return { success: true };
+  });
+
+  ipcMain.handle('session:load', async (_event, { messages }) => {
+    // Rebuild messagesRef from saved thread messages (user + assistant only)
+    messagesRef = [];
+    costRef = { input: 0, output: 0, cost: 0 };
+    if (Array.isArray(messages)) {
+      for (const msg of messages) {
+        if (msg.type === 'user' && msg.text) {
+          messagesRef.push({ role: 'user', content: msg.text });
+        } else if (msg.type === 'assistant' && msg.text) {
+          messagesRef.push({ role: 'assistant', content: msg.text });
+        }
+      }
+    }
+    return { success: true, messageCount: messagesRef.length };
+  });
+
+  // ── Voice Transcription ──────────────────────────────────────────────
+
+  // ── Streaming Voice Transcription (real-time) ──────────────────────
+
+  let voiceProcess = null;
+
+  ipcMain.handle('voice:start', async (_event, { sampleRate }) => {
+    // Kill any existing process
+    if (voiceProcess) {
+      try { voiceProcess.kill(); } catch {}
+      voiceProcess = null;
+    }
+
+    const transcribeBin = path.join(__dirname, 'transcribe');
+    if (process.platform !== 'darwin' || !fs.existsSync(transcribeBin)) {
+      return { error: 'Voice input requires macOS with Speech Recognition enabled.' };
+    }
+
+    const { spawn } = require('child_process');
+    const child = spawn(transcribeBin, [], { stdio: ['pipe', 'pipe', 'pipe'] });
+    voiceProcess = child;
+
+    // Send sample rate header
+    child.stdin.write(`RATE:${sampleRate || 16000}\n`);
+
+    // Read JSON lines from stdout → forward to renderer as events
+    let buffer = '';
+    child.stdout.on('data', (data) => {
+      buffer += data.toString();
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // Keep incomplete line in buffer
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const json = JSON.parse(line);
+          const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
+          if (win) win.webContents.send('voice:result', json);
+        } catch {}
+      }
+    });
+
+    child.stderr.on('data', (data) => {
+      console.warn('[vennie] transcribe stderr:', data.toString());
+    });
+
+    child.on('close', () => {
+      voiceProcess = null;
+    });
+
+    child.on('error', (err) => {
+      console.error('[vennie] transcribe error:', err.message);
+      voiceProcess = null;
+    });
+
+    return { started: true };
+  });
+
+  ipcMain.handle('voice:chunk', async (_event, { pcmBase64 }) => {
+    if (!voiceProcess || !voiceProcess.stdin.writable) return { error: 'No active voice session' };
+    try {
+      const buf = Buffer.from(pcmBase64, 'base64');
+      voiceProcess.stdin.write(buf);
+      return { ok: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('voice:stop', async () => {
+    if (!voiceProcess) return { ok: true };
+    try {
+      voiceProcess.stdin.end();
+      // Give it a moment to finish, then force kill
+      setTimeout(() => {
+        if (voiceProcess) {
+          try { voiceProcess.kill(); } catch {}
+          voiceProcess = null;
+        }
+      }, 5000);
+    } catch {}
+    return { ok: true };
+  });
+
+  // ── Attachments ──────────────────────────────────────────────────────
+
+  ipcMain.handle('files:pick', async () => {
+    const win = BrowserWindow.getFocusedWindow();
+    const result = await dialog.showOpenDialog(win, {
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'] },
+        { name: 'Documents', extensions: ['pdf', 'md', 'txt', 'json', 'yaml', 'yml', 'csv'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+    if (result.canceled || result.filePaths.length === 0) return [];
+
+    const attachments = [];
+    for (const filePath of result.filePaths) {
+      try {
+        const stat = fs.statSync(filePath);
+        if (stat.size > 20 * 1024 * 1024) continue; // Skip files > 20MB
+
+        const ext = path.extname(filePath).toLowerCase();
+        const fileName = path.basename(filePath);
+        const isImage = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'].includes(ext);
+
+        if (isImage) {
+          const data = fs.readFileSync(filePath).toString('base64');
+          const mediaType = {
+            '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+            '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp',
+          }[ext] || 'image/png';
+          attachments.push({ type: 'image', fileName, filePath, mediaType, data, size: stat.size });
+        } else {
+          const content = fs.readFileSync(filePath, 'utf8');
+          attachments.push({ type: 'document', fileName, filePath, content, size: stat.size });
+        }
+      } catch {}
+    }
+    return attachments;
+  });
+
+  ipcMain.handle('files:read-drop', async (_event, { filePaths }) => {
+    const attachments = [];
+    for (const filePath of filePaths) {
+      try {
+        const stat = fs.statSync(filePath);
+        if (stat.size > 20 * 1024 * 1024) continue;
+
+        const ext = path.extname(filePath).toLowerCase();
+        const fileName = path.basename(filePath);
+        const isImage = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'].includes(ext);
+
+        if (isImage) {
+          const data = fs.readFileSync(filePath).toString('base64');
+          const mediaType = {
+            '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+            '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp',
+          }[ext] || 'image/png';
+          attachments.push({ type: 'image', fileName, filePath, mediaType, data, size: stat.size });
+        } else {
+          const content = fs.readFileSync(filePath, 'utf8');
+          attachments.push({ type: 'document', fileName, filePath, content, size: stat.size });
+        }
+      } catch {}
+    }
+    return attachments;
   });
 }
 
@@ -732,6 +1040,92 @@ function listPersonas(vaultPath) {
     }
   }
   return personas;
+}
+
+function getPersonaRegistry(vaultPath) {
+  const registryPath = path.join(vaultPath, '.vennie', 'personas', 'marketplace-registry.json');
+  if (!fs.existsSync(registryPath)) return [];
+  try {
+    const catalog = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+    // Check which ones are already installed
+    const marketplaceDir = path.join(vaultPath, '.vennie', 'personas', 'marketplace');
+    const customDir = path.join(vaultPath, '.vennie', 'personas', 'custom');
+    const installedIds = new Set();
+    for (const dir of [marketplaceDir, customDir]) {
+      if (!fs.existsSync(dir)) continue;
+      for (const file of fs.readdirSync(dir).filter(f => f.endsWith('.md'))) {
+        const content = fs.readFileSync(path.join(dir, file), 'utf8');
+        const idMatch = content.match(/^id:\s*["']?(.+?)["']?\s*$/m);
+        if (idMatch) installedIds.add(idMatch[1]);
+      }
+    }
+    return catalog.map(p => ({ ...p, installed: installedIds.has(p.id) }));
+  } catch { return []; }
+}
+
+function installPersonaFromRegistry(vaultPath, personaId) {
+  const registry = getPersonaRegistry(vaultPath);
+  const entry = registry.find(p => p.id === personaId);
+  if (!entry) return { error: `Persona '${personaId}' not found in registry.` };
+  if (entry.installed) return { error: `Persona '${personaId}' is already installed.` };
+
+  const marketplaceDir = path.join(vaultPath, '.vennie', 'personas', 'marketplace');
+  if (!fs.existsSync(marketplaceDir)) fs.mkdirSync(marketplaceDir, { recursive: true });
+
+  // Build .md file with YAML frontmatter matching existing format
+  const frontmatter = [
+    '---',
+    `name: ${entry.name}`,
+    `id: ${entry.id}`,
+    entry.type === 'real-person' ? `type: real-person` : null,
+    `archetype: ${entry.category.charAt(0).toUpperCase() + entry.category.slice(1)}`,
+    `style: ${entry.style}`,
+    `best_for: ${entry.bestFor}`,
+    `author: ${entry.author}`,
+    `version: ${entry.version}`,
+    `installed_at: ${new Date().toISOString()}`,
+    '---',
+  ].filter(Boolean).join('\n');
+
+  const content = `${frontmatter}\n\n${entry.personaContent || `# ${entry.name}\n\n${entry.description}`}`;
+  const filePath = path.join(marketplaceDir, `${entry.id}.md`);
+  fs.writeFileSync(filePath, content, 'utf8');
+
+  return { status: 'installed', id: entry.id, name: entry.name, path: filePath };
+}
+
+function uninstallPersona(vaultPath, personaId) {
+  const marketplaceDir = path.join(vaultPath, '.vennie', 'personas', 'marketplace');
+  const filePath = path.join(marketplaceDir, `${personaId}.md`);
+  if (!fs.existsSync(filePath)) return { error: `Persona '${personaId}' is not installed or is a core persona.` };
+  fs.unlinkSync(filePath);
+  return { status: 'uninstalled', id: personaId };
+}
+
+function getPersonaDetail(vaultPath, personaId) {
+  // Check installed first
+  const dirs = ['core', 'marketplace', 'custom'];
+  for (const dir of dirs) {
+    const dirPath = path.join(vaultPath, '.vennie', 'personas', dir);
+    if (!fs.existsSync(dirPath)) continue;
+    for (const file of fs.readdirSync(dirPath).filter(f => f.endsWith('.md'))) {
+      const content = fs.readFileSync(path.join(dirPath, file), 'utf8');
+      const idMatch = content.match(/^id:\s*["']?(.+?)["']?\s*$/m);
+      if (idMatch && idMatch[1] === personaId) {
+        return { source: dir, installed: true, content };
+      }
+    }
+  }
+  // Fall back to registry
+  const registryPath = path.join(vaultPath, '.vennie', 'personas', 'marketplace-registry.json');
+  if (fs.existsSync(registryPath)) {
+    try {
+      const catalog = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+      const entry = catalog.find(p => p.id === personaId);
+      if (entry) return { source: 'registry', installed: false, ...entry };
+    } catch {}
+  }
+  return { error: `Persona '${personaId}' not found.` };
 }
 
 function buildVaultTree(vaultPath, depth = 0, maxDepth = 3) {

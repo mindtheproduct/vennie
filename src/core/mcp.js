@@ -106,10 +106,81 @@ async function startMCPServers(vaultPath) {
 
 /**
  * Start a single MCP server from its config.
+ * Supports two transport types:
+ *  - stdio (default): spawns a local process
+ *  - http: connects to a remote Streamable HTTP MCP endpoint
  */
 async function startOneServer(name, config, vaultPath) {
   // Config may nest under "server" key or be flat
   const srv = config.server || config;
+
+  // Late-require MCP SDK
+  let Client;
+  try {
+    Client = require('@modelcontextprotocol/sdk/client/index.js').Client;
+  } catch (err) {
+    throw new Error(`@modelcontextprotocol/sdk not installed: ${err.message}`);
+  }
+
+  const transportType = srv.transport || 'stdio';
+
+  // ── HTTP transport (remote MCP servers) ───────────────────────────────
+  if (transportType === 'http') {
+    const url = srv.url;
+    if (!url) throw new Error(`HTTP MCP server "${name}" missing url`);
+
+    // Resolve env var references in headers (e.g. "${MTP_API_KEY}")
+    const rawHeaders = srv.headers || {};
+    const headers = {};
+    for (const [k, v] of Object.entries(rawHeaders)) {
+      headers[k] = typeof v === 'string'
+        ? v.replace(/\$\{(\w+)\}/g, (_, envVar) => process.env[envVar] || '')
+        : v;
+    }
+
+    // Build a lightweight client that speaks JSON-RPC over HTTP
+    const httpClient = {
+      async callTool({ name: toolName, arguments: toolArgs }) {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...headers },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'tools/call',
+            params: { name: toolName, arguments: toolArgs },
+            id: Date.now(),
+          }),
+        });
+        const json = await res.json();
+        if (json.error) throw new Error(json.error.message || JSON.stringify(json.error));
+        return json.result;
+      },
+    };
+
+    // Discover tools via tools/list
+    const listRes = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'tools/list',
+        params: {},
+        id: 1,
+      }),
+    });
+    const listJson = await listRes.json();
+    const tools = listJson.result?.tools || [];
+
+    return { client: httpClient, transport: null, tools };
+  }
+
+  // ── Stdio transport (local process) ───────────────────────────────────
+  let StdioClientTransport;
+  try {
+    StdioClientTransport = require('@modelcontextprotocol/sdk/client/stdio.js').StdioClientTransport;
+  } catch (err) {
+    throw new Error(`@modelcontextprotocol/sdk not installed: ${err.message}`);
+  }
 
   const command = srv.command;
   const args = (srv.args || []).map(a => a.replace(/\$\{workspaceFolder\}/g, vaultPath));
@@ -121,21 +192,12 @@ async function startOneServer(name, config, vaultPath) {
   const env = { ...process.env, ...resolvedEnv, VENNIE_VAULT: vaultPath };
   const cwd = srv.cwd ? path.resolve(vaultPath, srv.cwd) : vaultPath;
 
-  // Late-require MCP SDK — only load if we actually have servers to connect
-  let Client, StdioClientTransport;
-  try {
-    Client = require('@modelcontextprotocol/sdk/client/index.js').Client;
-    StdioClientTransport = require('@modelcontextprotocol/sdk/client/stdio.js').StdioClientTransport;
-  } catch (err) {
-    throw new Error(`@modelcontextprotocol/sdk not installed: ${err.message}`);
-  }
-
   const transport = new StdioClientTransport({
     command,
     args,
     env,
     cwd,
-    stderr: 'pipe', // Suppress noisy MCP SDK logging
+    stderr: 'pipe',
   });
 
   const client = new Client({
@@ -145,7 +207,6 @@ async function startOneServer(name, config, vaultPath) {
 
   await client.connect(transport);
 
-  // Discover tools
   const toolsResult = await client.listTools();
   const tools = toolsResult.tools || [];
 

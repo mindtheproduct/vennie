@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -44,6 +44,8 @@ function getVersion() {
 let mainWindow = null;
 let tray = null;
 
+const APP_ICON = path.join(__dirname, '..', '..', '..', 'build', 'icon-1024.png');
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -53,6 +55,7 @@ function createWindow() {
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 12 },
     backgroundColor: '#09090B',
+    icon: APP_ICON,
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload.js'),
       contextIsolation: true,
@@ -93,9 +96,9 @@ function createWindow() {
 // ── Tray ───────────────────────────────────────────────────────────────────
 
 function createTray() {
-  // Simple 16x16 tray icon (will be replaced with proper icon)
-  const icon = nativeImage.createEmpty();
-  tray = new Tray(icon);
+  const trayIconPath = path.join(__dirname, '..', '..', '..', 'build', 'icon.iconset', 'icon_16x16.png');
+  const icon = fs.existsSync(trayIconPath) ? nativeImage.createFromPath(trayIconPath) : nativeImage.createEmpty();
+  tray = new Tray(icon.resize({ width: 16, height: 16 }));
   tray.setToolTip('Vennie');
 
   const contextMenu = Menu.buildFromTemplate([
@@ -130,10 +133,90 @@ function createTray() {
 // ── IPC Setup ──────────────────────────────────────────────────────────────
 
 const { setupIPC } = require('./ipc.js');
+const { setupNotifications } = require('./notifications.js');
+
+// ── Floating Capture Window ───────────────────────────────────────────────
+
+let floatingWindow = null;
+
+function createFloatingWindow() {
+  const { screen } = require('electron');
+  const display = screen.getPrimaryDisplay();
+  const { width: screenW } = display.workAreaSize;
+
+  floatingWindow = new BrowserWindow({
+    width: 480,
+    height: 70,
+    x: Math.round((screenW - 480) / 2),
+    y: Math.round(display.workAreaSize.height * 0.28),
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    movable: true,
+    hasShadow: false,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, '..', 'floating-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  if (process.platform === 'darwin') {
+    floatingWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    floatingWindow.setAlwaysOnTop(true, 'floating');
+  }
+
+  if (process.env.VITE_DEV_SERVER_URL) {
+    floatingWindow.loadURL(process.env.VITE_DEV_SERVER_URL + '/src/desktop/renderer/floating/index.html');
+  } else {
+    floatingWindow.loadFile(path.join(__dirname, '..', 'renderer', 'floating', 'index.html'));
+  }
+
+  floatingWindow.on('blur', () => {
+    if (floatingWindow && floatingWindow.isVisible()) {
+      floatingWindow.hide();
+    }
+  });
+
+  floatingWindow.on('closed', () => {
+    floatingWindow = null;
+  });
+}
+
+function toggleFloatingWindow() {
+  if (!floatingWindow) {
+    createFloatingWindow();
+    floatingWindow.once('ready-to-show', () => floatingWindow.show());
+  } else if (floatingWindow.isVisible()) {
+    floatingWindow.hide();
+  } else {
+    floatingWindow.show();
+    floatingWindow.focus();
+  }
+}
 
 // ── App Lifecycle ──────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
+  const { session } = require('electron');
+
+  // Grant microphone permission for voice input
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (permission === 'media') {
+      callback(true);
+    } else {
+      callback(true); // Grant other permissions too (notifications etc)
+    }
+  });
+
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+    if (permission === 'media') return true;
+    return true;
+  });
+
   const vaultPath = getVaultPath();
   const version = getVersion();
 
@@ -142,6 +225,38 @@ app.whenReady().then(async () => {
   } catch (err) {
     console.error('IPC setup warning:', err.message);
     // Continue anyway — app can work without MCP servers
+  }
+
+  // Global shortcut: Cmd+Shift+V (or Ctrl+Shift+V)
+  globalShortcut.register('CommandOrControl+Shift+V', toggleFloatingWindow);
+
+  // Floating window IPC
+  ipcMain.handle('floating:capture', async (_event, { type, content }) => {
+    try {
+      const { quickCapture } = require('../../core/vault-pulse.js');
+      return quickCapture(vaultPath, type, content);
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('floating:dismiss', async () => {
+    if (floatingWindow) floatingWindow.hide();
+    return { success: true };
+  });
+
+  // Smart notifications
+  let notifHandle = null;
+  try {
+    notifHandle = setupNotifications(vaultPath);
+    console.log('[vennie] Notifications enabled');
+  } catch (err) {
+    console.error('[vennie] Notification setup failed:', err.message);
+  }
+
+  // Set dock icon on macOS
+  if (process.platform === 'darwin' && fs.existsSync(APP_ICON)) {
+    app.dock.setIcon(nativeImage.createFromPath(APP_ICON));
   }
 
   createWindow();
@@ -159,6 +274,11 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('will-quit', () => {
+  // Unregister global shortcuts
+  globalShortcut.unregisterAll();
 });
 
 app.on('before-quit', () => {

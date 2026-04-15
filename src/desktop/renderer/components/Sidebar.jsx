@@ -1,5 +1,5 @@
 import React from 'react';
-import { MessageSquare, MessagesSquare, PenLine, LayoutDashboard, Activity, Users, FolderOpen, Zap, Settings } from 'lucide-react';
+import { MessageSquare, MessagesSquare, PenLine, LayoutDashboard, Activity, Users, FolderOpen, Zap, Sparkles, Settings, Scale, Award, Radar, Rocket, FileText, Clock, Columns2 } from 'lucide-react';
 import { cn } from '../lib/utils.js';
 
 const NAV_GROUPS = [
@@ -8,6 +8,7 @@ const NAV_GROUPS = [
     { id: 'chat', icon: MessageSquare },
     { id: 'threads', icon: MessagesSquare },
     { id: 'focus', icon: PenLine },
+    { id: 'split', icon: Columns2 },
   ],
   // Secondary — information
   [
@@ -15,10 +16,19 @@ const NAV_GROUPS = [
     { id: 'activity', icon: Activity },
     { id: 'people', icon: Users },
   ],
-  // Tertiary — tools
+  // Analysis
   [
+    { id: 'decisions', icon: Scale },
+    { id: 'career', icon: Award },
+    { id: 'radar', icon: Radar },
+  ],
+  // Tools
+  [
+    { id: 'ship', icon: Rocket },
+    { id: 'digest', icon: FileText },
     { id: 'vault', icon: FolderOpen },
     { id: 'skills', icon: Zap },
+    { id: 'timemachine', icon: Clock },
   ],
 ];
 

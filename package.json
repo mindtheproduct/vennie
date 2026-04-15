@@ -1,6 +1,6 @@
 {
   "name": "vennie",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Your AI product operating system — by Mind the Product",
   "main": "src/desktop/main/index.js",
   "bin": {
@@ -61,6 +61,7 @@
     "@modelcontextprotocol/sdk": "^1.27.0",
     "ink": "^3.2.0",
     "ink-text-input": "^4.0.1",
+    "mermaid": "^11.14.0",
     "react": "^18.3.1"
   },
   "devDependencies": {

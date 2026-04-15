@@ -10,8 +10,10 @@ contextBridge.exposeInMainWorld('vennie', {
   init: () => ipcRenderer.invoke('app:init'),
 
   // ── Agent ───────────────────────────────────────────────────────────────
-  send: (message) => ipcRenderer.invoke('agent:send', { message }),
+  send: (message, attachments) => ipcRenderer.invoke('agent:send', { message, attachments }),
   abort: () => ipcRenderer.invoke('agent:abort'),
+  pickFiles: () => ipcRenderer.invoke('files:pick'),
+  readDroppedFiles: (filePaths) => ipcRenderer.invoke('files:read-drop', { filePaths }),
   onEvent: (callback) => {
     const handler = (_event, data) => callback(data);
     ipcRenderer.on('agent:event', handler);
@@ -34,6 +36,10 @@ contextBridge.exposeInMainWorld('vennie', {
   // ── Personas ────────────────────────────────────────────────────────────
   listPersonas: () => ipcRenderer.invoke('persona:list'),
   setPersona: (id) => ipcRenderer.invoke('persona:set', { id }),
+  getPersonaRegistry: () => ipcRenderer.invoke('persona:registry'),
+  installPersona: (id) => ipcRenderer.invoke('persona:install', { id }),
+  uninstallPersona: (id) => ipcRenderer.invoke('persona:uninstall', { id }),
+  getPersonaDetail: (id) => ipcRenderer.invoke('persona:detail', { id }),
 
   // ── Settings ────────────────────────────────────────────────────────────
   getSettings: () => ipcRenderer.invoke('settings:get'),
@@ -49,9 +55,28 @@ contextBridge.exposeInMainWorld('vennie', {
   getGym: () => ipcRenderer.invoke('analysis:gym'),
   getCareer: () => ipcRenderer.invoke('analysis:career'),
 
+  // ── Git / Time Machine ─────────────────────────────────────────────────
+  getGitLog: () => ipcRenderer.invoke('git:log'),
+  getGitDiff: (hash) => ipcRenderer.invoke('git:diff', { hash }),
+
+  // ── Voice (streaming) ────────────────────────────────────────────────
+  voiceStart: (sampleRate) => ipcRenderer.invoke('voice:start', { sampleRate }),
+  voiceChunk: (pcmBase64) => ipcRenderer.invoke('voice:chunk', { pcmBase64 }),
+  voiceStop: () => ipcRenderer.invoke('voice:stop'),
+  onVoiceResult: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on('voice:result', handler);
+    return () => ipcRenderer.removeListener('voice:result', handler);
+  },
+
+  // ── Notifications ──────────────────────────────────────────────────────
+  getNotificationPrefs: () => ipcRenderer.invoke('notifications:getPrefs'),
+  setNotificationPrefs: (prefs) => ipcRenderer.invoke('notifications:setPrefs', { prefs }),
+
   // ── Session ─────────────────────────────────────────────────────────────
   saveSession: () => ipcRenderer.invoke('session:save'),
   clearSession: () => ipcRenderer.invoke('session:clear'),
+  loadSession: (messages) => ipcRenderer.invoke('session:load', { messages }),
 
   // ── Navigation events from main ─────────────────────────────────────────
   onNavigate: (callback) => {

@@ -1,0 +1,11 @@
+{
+  "name": "mtp-knowledge",
+  "description": "Mind the Product content library — search 1,500+ articles, conference talks, and PM resources. Powered by hybrid vector + keyword search.",
+  "server": {
+    "transport": "http",
+    "url": "https://www.mindtheproduct.com/api/mcp",
+    "headers": {
+      "x-mcp-key": "${MTP_MCP_VENNIE_KEY}"
+    }
+  }
+}

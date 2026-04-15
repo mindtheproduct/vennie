@@ -1,21 +1,27 @@
 import React, { useEffect, useRef } from 'react';
 import { Command } from 'cmdk';
-import { MessageSquare, MessagesSquare, PenLine, LayoutDashboard, Activity, Users, FolderOpen, Zap, Settings, Search, ArrowRight } from 'lucide-react';
+import { MessageSquare, PenLine, LayoutDashboard, Activity, Users, FolderOpen, Zap, Sparkles, Settings, Search, Scale, Award, Radar, Rocket, FileText, Store, Clock, Columns2 } from 'lucide-react';
 import { cn } from '../lib/utils.js';
 
 const VIEW_COMMANDS = [
   { name: 'Chat', type: 'view', value: 'chat', icon: MessageSquare },
-  { name: 'Threads', type: 'view', value: 'threads', icon: MessagesSquare },
-  { name: 'Focus', type: 'view', value: 'focus', icon: PenLine },
   { name: 'Dashboard', type: 'view', value: 'dashboard', icon: LayoutDashboard },
+  { name: 'Focus', type: 'view', value: 'focus', icon: PenLine },
+  { name: 'Split Persona', type: 'view', value: 'split', icon: Columns2 },
   { name: 'Activity', type: 'view', value: 'activity', icon: Activity },
   { name: 'People', type: 'view', value: 'people', icon: Users },
+  { name: 'Decisions', type: 'view', value: 'decisions', icon: Scale },
+  { name: 'Career', type: 'view', value: 'career', icon: Award },
+  { name: 'Radar', type: 'view', value: 'radar', icon: Radar },
+  { name: 'Ship to Story', type: 'view', value: 'ship', icon: Rocket },
+  { name: 'Digest', type: 'view', value: 'digest', icon: FileText },
   { name: 'Vault', type: 'view', value: 'vault', icon: FolderOpen },
   { name: 'Skills', type: 'view', value: 'skills', icon: Zap },
+  { name: 'Marketplace', type: 'view', value: 'marketplace', icon: Store },
+  { name: 'Time Machine', type: 'view', value: 'timemachine', icon: Clock },
+  { name: 'Personas', type: 'view', value: 'personas', icon: Sparkles },
   { name: 'Settings', type: 'view', value: 'settings', icon: Settings },
 ];
-
-const SHORTCUTS = { chat: '⌘1', threads: '⌘2', focus: '⌘3', dashboard: '⌘4', activity: '⌘5', people: '⌘6', vault: '⌘7', skills: '⌘8', settings: '⌘9' };
 
 export default function CommandPalette({ commands, onSelect, onClose }) {
   const overlayRef = useRef(null);
@@ -70,9 +76,6 @@ export default function CommandPalette({ commands, onSelect, onClose }) {
                   >
                     <Icon size={15} className="shrink-0 opacity-50" />
                     <span className="flex-1 text-sm font-medium">{cmd.name}</span>
-                    <kbd className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--surface-tertiary)] font-mono text-[var(--text-tertiary)]">
-                      {SHORTCUTS[cmd.value]}
-                    </kbd>
                   </Command.Item>
                 );
               })}

@@ -17,11 +17,11 @@
   --color-text-secondary:     #6E6E82;
   --color-text-tertiary:      #A0A0B4;
 
-  /* Accent (indigo) */
-  --color-accent:             #6366F1;
-  --color-accent-hover:       #4F46E5;
-  --color-accent-subtle:      rgba(99, 102, 241, 0.08);
-  --color-accent-muted:       rgba(99, 102, 241, 0.04);
+  /* Accent (cyan) */
+  --color-accent:             #06B6D4;
+  --color-accent-hover:       #0891B2;
+  --color-accent-subtle:      rgba(6, 182, 212, 0.08);
+  --color-accent-muted:       rgba(6, 182, 212, 0.04);
 
   /* Semantic */
   --color-success:            #10B981;
@@ -78,10 +78,10 @@
   --color-text-secondary:     #A1A1AA;
   --color-text-tertiary:      #52525B;
 
-  --color-accent:             #A78BFA;
-  --color-accent-hover:       #8B5CF6;
-  --color-accent-subtle:      rgba(167, 139, 250, 0.10);
-  --color-accent-muted:       rgba(167, 139, 250, 0.04);
+  --color-accent:             #22D3EE;
+  --color-accent-hover:       #06B6D4;
+  --color-accent-subtle:      rgba(34, 211, 238, 0.10);
+  --color-accent-muted:       rgba(34, 211, 238, 0.04);
 
   --color-success:            #4ADE80;
   --color-warning:            #FACC15;
@@ -118,8 +118,8 @@
   --shadow-glass:         0 8px 32px rgba(0, 0, 0, 0.08);
 
   /* Glow effects */
-  --glow-accent:          0 0 20px rgba(99, 102, 241, 0.15);
-  --glow-accent-strong:   0 0 30px rgba(99, 102, 241, 0.25);
+  --glow-accent:          0 0 20px rgba(6, 182, 212, 0.15);
+  --glow-accent-strong:   0 0 30px rgba(6, 182, 212, 0.25);
   --shadow-float:         0 4px 24px rgba(0, 0, 0, 0.06);
 
   color-scheme: light;
@@ -130,8 +130,8 @@
   --surface-glass-border: rgba(255, 255, 255, 0.06);
   --shadow-glass:         0 8px 32px rgba(0, 0, 0, 0.5);
 
-  --glow-accent:          0 0 20px rgba(167, 139, 250, 0.12);
-  --glow-accent-strong:   0 0 40px rgba(167, 139, 250, 0.2);
+  --glow-accent:          0 0 20px rgba(34, 211, 238, 0.12);
+  --glow-accent-strong:   0 0 40px rgba(34, 211, 238, 0.2);
   --shadow-float:         0 4px 24px rgba(0, 0, 0, 0.4);
 
   color-scheme: dark;
@@ -199,8 +199,8 @@ html, body, #root {
     transition: border-color 0.2s, box-shadow 0.2s;
   }
   .input-floating:focus-within {
-    border-color: var(--accent);
-    box-shadow: var(--shadow-float), var(--glow-accent);
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-float);
   }
 
   /* Surface card — no border, just elevation */
@@ -235,6 +235,7 @@ html, body, #root {
     overflow: hidden;
   }
 }
+
 
 /* ── Theme Transition ───────────────────────────────────────────────────── */
 

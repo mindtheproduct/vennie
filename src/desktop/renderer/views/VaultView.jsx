@@ -1,7 +1,18 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Search, ChevronDown, ChevronRight, File, Folder, FolderOpen } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Search, ChevronDown, ChevronRight, FileText, Folder, FolderOpen, Settings, Hash, Calendar, List } from 'lucide-react';
 import { cn } from '../lib/utils.js';
 import MarkdownRenderer from '../components/MarkdownRenderer.jsx';
+
+// ── File icon by extension ──────────────────────────────────────────────
+function getFileIcon(name) {
+  if (name.endsWith('.md')) return FileText;
+  if (name.endsWith('.yaml') || name.endsWith('.yml')) return Settings;
+  if (name.endsWith('.json')) return Hash;
+  return FileText;
+}
+
+// ── Collapse state stored outside renders ───────────────────────────────
+const collapsedDirs = new Set();
 
 export default function VaultView({ appData }) {
   const [tree, setTree] = useState([]);
@@ -10,6 +21,7 @@ export default function VaultView({ appData }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+  const treeRef = useRef(null);
 
   useEffect(() => {
     window.vennie.getTree().then(data => {
@@ -31,13 +43,16 @@ export default function VaultView({ appData }) {
     setIsSearching(false);
   }, [searchQuery]);
 
+  const fileName = selectedFile?.split('/').pop() || '';
+  const relPath = selectedFile?.replace(appData?.vaultPath + '/', '') || '';
+
   return (
     <div className="flex-1 flex h-full overflow-hidden bg-[var(--surface-primary)]">
       {/* Left — Tree */}
-      <div className="w-[240px] shrink-0 flex flex-col bg-[var(--surface-secondary)]">
+      <div className="w-[250px] shrink-0 flex flex-col bg-[var(--surface-secondary)] border-r border-[var(--border)]">
         {/* Search */}
-        <div className="p-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--surface-tertiary)] focus-within:bg-[var(--surface-elevated)] transition-colors">
+        <div className="p-3 border-b border-[var(--border)]">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--surface-tertiary)] focus-within:ring-1 focus-within:ring-[var(--accent)]/30 transition-all">
             <Search size={12} className="text-[var(--text-tertiary)] shrink-0" />
             <input
               type="text"
@@ -45,51 +60,80 @@ export default function VaultView({ appData }) {
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               placeholder="Search vault..."
-              className="flex-1 bg-transparent border-none outline-none text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)]"
+              className="flex-1 bg-transparent border-none outline-none text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)]"
             />
           </div>
         </div>
 
         {/* Tree / Results */}
-        <div className="flex-1 overflow-auto py-1">
+        <div ref={treeRef} className="flex-1 overflow-auto py-1">
           {searchResults.length > 0 ? (
             searchResults.map((r, i) => (
               <button
                 key={i}
-                onClick={() => openFile(r.file)}
-                className="w-full text-left px-4 py-2 hover:bg-[var(--surface-tertiary)] transition-colors"
+                onClick={() => { openFile(r.file); setSearchResults([]); setSearchQuery(''); }}
+                className={cn(
+                  'w-full text-left px-4 py-2.5 transition-colors border-b border-[var(--border)]/50',
+                  selectedFile === r.file
+                    ? 'bg-[var(--surface-tertiary)]'
+                    : 'hover:bg-[var(--surface-tertiary)]'
+                )}
               >
-                <div className="text-sm font-medium text-[var(--text-primary)] truncate">{r.file.split('/').pop()}</div>
-                <div className="text-[10px] text-[var(--text-tertiary)] mt-0.5 line-clamp-2">{(r.snippet || '').slice(0, 100)}</div>
+                <div className="flex items-center gap-1.5">
+                  <FileText size={11} className="text-[var(--text-tertiary)] shrink-0" />
+                  <span className="text-[13px] font-medium text-[var(--text-primary)] truncate">{r.file.split('/').pop()}</span>
+                </div>
+                <div className="text-[10px] text-[var(--text-tertiary)] mt-1 line-clamp-2 pl-[18px]">{(r.snippet || '').slice(0, 100)}</div>
               </button>
             ))
           ) : (
-            tree.map(node => <TreeNode key={node.path} node={node} depth={0} selectedFile={selectedFile} openFile={openFile} />)
+            tree.map(node => (
+              <TreeNode
+                key={node.path}
+                node={node}
+                depth={0}
+                selectedFile={selectedFile}
+                openFile={openFile}
+              />
+            ))
           )}
         </div>
       </div>
 
       {/* Right — Preview */}
-      <div className="flex-1 overflow-auto px-8 py-6">
+      <div className="flex-1 flex flex-col overflow-hidden">
         {selectedFile ? (
-          <div>
-            <div className="flex items-center justify-between mb-5 pb-3 border-b border-[var(--border)]">
-              <h2 className="text-lg font-semibold text-[var(--text-primary)]">{selectedFile.split('/').pop()}</h2>
-              <span className="text-[10px] text-[var(--text-tertiary)] font-mono">
-                {selectedFile.replace(appData?.vaultPath + '/', '')}
-              </span>
+          <>
+            {/* Document header */}
+            <div className="px-8 pt-6 pb-4 border-b border-[var(--border)] bg-[var(--surface-secondary)]/50 shrink-0">
+              <div className="flex items-center gap-2 mb-1">
+                <FileText size={14} className="text-[var(--text-tertiary)]" />
+                <h2 className="text-lg font-semibold text-[var(--text-primary)] tracking-tight">{fileName}</h2>
+              </div>
+              <span className="text-[11px] text-[var(--text-tertiary)] font-mono">{relPath}</span>
             </div>
-            {selectedFile.endsWith('.md') ? (
-              <div className="text-sm"><MarkdownRenderer text={fileContent} /></div>
-            ) : (
-              <pre className="bg-[var(--surface-tertiary)] p-4 rounded-lg text-sm font-mono text-[var(--text-secondary)] overflow-x-auto whitespace-pre-wrap">
-                {fileContent}
-              </pre>
-            )}
-          </div>
+
+            {/* Document body */}
+            <div className="flex-1 overflow-auto px-8 py-6">
+              <div className="max-w-[720px]">
+                {selectedFile.endsWith('.md') ? (
+                  <div className="text-[14px] leading-[1.7] text-[var(--text-secondary)]">
+                    <MarkdownRenderer text={fileContent} />
+                  </div>
+                ) : (
+                  <pre className="bg-[var(--surface-tertiary)] p-4 rounded-lg text-[13px] font-mono text-[var(--text-secondary)] overflow-x-auto whitespace-pre-wrap">
+                    {fileContent}
+                  </pre>
+                )}
+              </div>
+            </div>
+          </>
         ) : (
-          <div className="flex items-center justify-center h-full text-[var(--text-tertiary)] text-sm">
-            Select a file to preview
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <Folder size={32} className="text-[var(--text-tertiary)]/30 mx-auto mb-3" />
+              <p className="text-[var(--text-tertiary)] text-sm">Select a file to preview</p>
+            </div>
           </div>
         )}
       </div>
@@ -97,41 +141,79 @@ export default function VaultView({ appData }) {
   );
 }
 
+// ── Tree node ───────────────────────────────────────────────────────────
+
 function TreeNode({ node, depth, selectedFile, openFile }) {
-  const [open, setOpen] = useState(depth < 1);
+  const [open, setOpen] = useState(() => {
+    if (collapsedDirs.has(node.path)) return false;
+    return depth < 1;
+  });
+
+  function toggleDir() {
+    const next = !open;
+    setOpen(next);
+    if (next) collapsedDirs.delete(node.path);
+    else collapsedDirs.add(node.path);
+  }
 
   if (node.isDir) {
     const DirIcon = open ? FolderOpen : Folder;
     return (
       <div>
         <button
-          onClick={() => setOpen(o => !o)}
-          className="w-full flex items-center gap-1.5 py-1 hover:bg-[var(--surface-tertiary)] transition-colors text-[var(--text-secondary)] text-sm select-none"
-          style={{ paddingLeft: 12 + depth * 16 }}
+          onClick={toggleDir}
+          className="w-full flex items-center gap-1.5 py-[5px] hover:bg-[var(--surface-tertiary)] transition-colors text-[var(--text-secondary)] text-[13px] select-none group/dir"
+          style={{ paddingLeft: 12 + depth * 14 }}
+          title={node.name}
         >
-          {open ? <ChevronDown size={11} className="text-[var(--text-tertiary)] shrink-0" /> : <ChevronRight size={11} className="text-[var(--text-tertiary)] shrink-0" />}
+          {/* Indent guide */}
+          {depth > 0 && (
+            <div
+              className="absolute left-0 top-0 bottom-0 w-px bg-[var(--border)]"
+              style={{ left: 18 + (depth - 1) * 14 }}
+            />
+          )}
+          <span className="w-3 flex items-center justify-center shrink-0">
+            {open
+              ? <ChevronDown size={10} className="text-[var(--text-tertiary)]" />
+              : <ChevronRight size={10} className="text-[var(--text-tertiary)]" />
+            }
+          </span>
           <DirIcon size={13} className="text-[var(--text-tertiary)] shrink-0" />
           <span className="font-medium truncate">{node.name}</span>
         </button>
-        {open && node.children?.map(child => (
-          <TreeNode key={child.path} node={child} depth={depth + 1} selectedFile={selectedFile} openFile={openFile} />
-        ))}
+        {open && (
+          <div className="relative">
+            {/* Indent guide line */}
+            <div
+              className="absolute top-0 bottom-0 w-px bg-[var(--border)]/60"
+              style={{ left: 19 + depth * 14 }}
+            />
+            {node.children?.map(child => (
+              <TreeNode key={child.path} node={child} depth={depth + 1} selectedFile={selectedFile} openFile={openFile} />
+            ))}
+          </div>
+        )}
       </div>
     );
   }
 
+  const FileIcon = getFileIcon(node.name);
+  const isSelected = selectedFile === node.path;
+
   return (
     <button
       onClick={() => openFile(node.path)}
+      title={node.name}
       className={cn(
-        'w-full flex items-center gap-1.5 py-1 text-sm transition-colors truncate',
-        selectedFile === node.path
-          ? 'bg-[var(--accent-subtle)] text-[var(--accent)]'
+        'w-full flex items-center gap-1.5 py-[5px] text-[13px] transition-colors truncate',
+        isSelected
+          ? 'bg-[var(--accent-subtle)] text-[var(--text-primary)]'
           : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--surface-tertiary)]'
       )}
-      style={{ paddingLeft: 28 + depth * 16 }}
+      style={{ paddingLeft: 28 + depth * 14 }}
     >
-      <File size={12} className="shrink-0 opacity-40" />
+      <FileIcon size={12} className={cn('shrink-0', isSelected ? 'text-[var(--accent)]' : 'opacity-40')} />
       <span className="truncate">{node.name}</span>
     </button>
   );
