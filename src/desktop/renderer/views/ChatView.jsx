@@ -627,6 +627,20 @@ export default function ChatView({ appData, activeThreadId }) {
         {/* Messages */}
         <div ref={scrollRef} className="flex-1 overflow-auto">
           <div className={cn('mx-auto px-6 py-5', hasSidePanel ? 'max-w-[600px]' : 'max-w-[720px]')}>
+            {/* Update banner */}
+            {appData?.updateAvailable && messages.length === 0 && (
+              <div className="mb-4 mx-auto max-w-[480px] px-4 py-3 rounded-xl bg-[var(--accent-subtle)] border border-[var(--accent)]/20 flex items-center justify-between gap-3 animate-fade-in">
+                <span className="text-[13px] text-[var(--text-secondary)]">
+                  Vennie <span className="font-semibold text-[var(--accent)]">v{appData.updateAvailable.latest}</span> is available <span className="text-[var(--text-tertiary)]">(you're on v{appData.updateAvailable.current})</span>
+                </span>
+                <button
+                  onClick={() => handleSubmit('/update')}
+                  className="text-[12px] font-medium text-[var(--accent)] hover:text-[var(--text-primary)] px-3 py-1 rounded-lg bg-[var(--accent)]/10 hover:bg-[var(--accent)]/20 transition-all whitespace-nowrap"
+                >
+                  /update
+                </button>
+              </div>
+            )}
             {/* Welcome */}
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center min-h-[65vh] gap-6 animate-fade-in">

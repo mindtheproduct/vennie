@@ -83,6 +83,9 @@ async function setupIPC(vaultPath, version) {
     const skillCommands = listSkills(vaultPath).map(s => ({ name: s.name, description: s.description }));
     const allCommands = [...builtInCommands, ...skillCommands].sort((a, b) => a.name.localeCompare(b.name));
 
+    // Check npm for updates (non-blocking)
+    const updateAvailable = await checkForUpdate(versionRef).catch(() => null);
+
     return {
       version: versionRef,
       vaultPath,
@@ -93,6 +96,7 @@ async function setupIPC(vaultPath, version) {
       welcomeData,
       commands: allCommands,
       hasApiKey: !!process.env.ANTHROPIC_API_KEY,
+      updateAvailable,
     };
   });
 
@@ -782,7 +786,7 @@ function handleSlashCommand(trimmed, sender) {
 
   switch (cmd) {
     case 'help':
-      return { handled: true, type: 'system', text: 'Commands: /help, /model, /status, /think, /search, /log, /cost, /clear, /persona, /gym, /patterns, /who, /radar, /career, /brief, /simulate, /shipped, /challenge, /feedback, /quit' };
+      return { handled: true, type: 'system', text: 'Commands: /help, /model, /status, /think, /search, /log, /cost, /clear, /persona, /gym, /patterns, /who, /radar, /career, /brief, /simulate, /shipped, /challenge, /feedback, /update, /quit' };
 
     case 'cost':
       return { handled: true, type: 'system', text: `Input: ${costRef.input.toLocaleString()} tokens | Output: ${costRef.output.toLocaleString()} tokens | Cost: $${costRef.cost.toFixed(4)}` };
@@ -996,6 +1000,18 @@ function handleSlashCommand(trimmed, sender) {
       return { handled: true, type: 'system', text: '\u2713 Feedback sent — thanks! We read every one.' };
     }
 
+    case 'update': {
+      const { execSync } = require('child_process');
+      sender.send('agent:event', { type: 'system', message: 'Updating Vennie...' });
+      try {
+        execSync('npm install -g vennie@latest', { timeout: 60000, stdio: 'pipe' });
+        const newPkg = JSON.parse(execSync('npm info vennie version', { encoding: 'utf8' }).trim());
+        return { handled: true, type: 'system', text: `\u2713 Updated to v${newPkg || 'latest'}. Restart Vennie to use the new version.` };
+      } catch (err) {
+        return { handled: true, type: 'error', text: `Update failed: ${err.message}\nTry running manually: npm install -g vennie@latest` };
+      }
+    }
+
     default: {
       // Try loading as a skill
       const skill = loadSkill(vaultPath, cmd);
@@ -1007,6 +1023,28 @@ function handleSlashCommand(trimmed, sender) {
       }
       return { handled: false };
     }
+  }
+}
+
+// ── Update Check ──────────────────────────────────────────────────────────
+
+async function checkForUpdate(currentVersion) {
+  try {
+    const res = await fetch('https://registry.npmjs.org/vennie/latest', { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const latest = data.version;
+    if (!latest || latest === currentVersion) return null;
+    // Simple semver comparison: split and compare segments
+    const cur = currentVersion.split('.').map(Number);
+    const lat = latest.split('.').map(Number);
+    for (let i = 0; i < 3; i++) {
+      if ((lat[i] || 0) > (cur[i] || 0)) return { current: currentVersion, latest };
+      if ((lat[i] || 0) < (cur[i] || 0)) return null;
+    }
+    return null;
+  } catch {
+    return null; // network error — skip silently
   }
 }
 
@@ -1032,6 +1070,7 @@ function getBuiltInCommands() {
     { name: 'career', description: 'Career timeline and skill matrix' },
     { name: 'challenge', description: 'Adversarial analysis' },
     { name: 'feedback', description: 'Send feedback to the Vennie team' },
+    { name: 'update', description: 'Update Vennie to the latest version' },
     { name: 'cost', description: 'Show session cost' },
     { name: 'clear', description: 'Clear conversation' },
   ];
