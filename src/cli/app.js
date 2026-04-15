@@ -744,6 +744,28 @@ function App({ vaultPath, version, userName, initialTools, initialMcp, initialCo
     });
   }, []);
 
+  // ── Check for updates ──────────────────────────────────────
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('https://registry.npmjs.org/vennie/latest', { signal: AbortSignal.timeout(5000) });
+        if (!res.ok) return;
+        const data = await res.json();
+        const latest = data.version;
+        if (!latest || latest === version) return;
+        const cur = version.split('.').map(Number);
+        const lat = latest.split('.').map(Number);
+        for (let i = 0; i < 3; i++) {
+          if ((lat[i] || 0) > (cur[i] || 0)) {
+            addLine(`Vennie v${latest} is available (you're on v${version}). Run /update to upgrade.`, 'system');
+            return;
+          }
+          if ((lat[i] || 0) < (cur[i] || 0)) return;
+        }
+      } catch {}
+    })();
+  }, []);
+
   // ── Idle hint timer ───────────────────────────────────────
   useEffect(() => {
     let timer;
@@ -2293,6 +2315,8 @@ async function startInkApp(vaultPath, version, resumedSession) {
     { name: 'career', description: 'View your career timeline and skill matrix' },
     { name: 'challenge', description: 'Adversarial analysis: what are you missing?' },
     { name: 'sessions', description: 'List recent saved sessions' },
+    { name: 'feedback', description: 'Send feedback to the Vennie team' },
+    { name: 'update', description: 'Update Vennie to the latest version' },
     { name: 'cost', description: 'Show session cost breakdown' },
     { name: 'clear', description: 'Clear conversation history' },
     { name: 'quit', description: 'Exit Vennie' },
