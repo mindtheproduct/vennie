@@ -99,6 +99,27 @@ async function startCLI(vaultPath) {
   await renderWelcome(VERSION, { model: modelName, vaultPath });
 
   renderSystem(`${allTools.length} tools ready · /help for commands`);
+
+  // Check for updates (non-blocking)
+  (async () => {
+    try {
+      const res = await fetch('https://registry.npmjs.org/vennie/latest', { signal: AbortSignal.timeout(5000) });
+      if (!res.ok) return;
+      const data = await res.json();
+      const latest = data.version;
+      if (!latest || latest === VERSION) return;
+      const cur = VERSION.split('.').map(Number);
+      const lat = latest.split('.').map(Number);
+      for (let i = 0; i < 3; i++) {
+        if ((lat[i] || 0) > (cur[i] || 0)) {
+          renderSystem(`Vennie v${latest} is available (you're on v${VERSION}). Run /update to upgrade.`);
+          return;
+        }
+        if ((lat[i] || 0) < (cur[i] || 0)) return;
+      }
+    } catch {}
+  })();
+
   console.log();
 
   // ── Slash command autocomplete ───────────────────────────────────────
@@ -111,6 +132,8 @@ async function startCLI(vaultPath) {
     { name: 'buddy', description: 'Buddy commands (pet, sleep, wake)' },
     { name: 'cost', description: 'Show session cost breakdown' },
     { name: 'clear', description: 'Clear conversation history' },
+    { name: 'feedback', description: 'Send feedback to the Vennie team' },
+    { name: 'update', description: 'Update Vennie to the latest version' },
     { name: 'quit', description: 'Exit Vennie' },
   ];
   const skillCommands = listSkills(vaultPath).map(s => ({
@@ -335,6 +358,40 @@ async function startCLI(vaultPath) {
           console.log(`\n${PAD}${fg.skyBlue}vennie is awake!${style.reset}\n`);
         } else {
           console.log(`\n${PAD}${fg.dimBlue}Buddy commands: /buddy pet, /buddy sleep, /buddy wake, /dance${style.reset}\n`);
+        }
+        return true;
+      }
+
+      case 'feedback': {
+        if (!args.trim()) {
+          renderSystem('Usage: /feedback <your feedback>');
+          return true;
+        }
+        const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../../package.json'), 'utf8'));
+        const payload = {
+          feedback: args.trim(),
+          version: pkg.version,
+          timestamp: new Date().toISOString(),
+          platform: process.platform,
+        };
+        fetch('https://hooks.zapier.com/hooks/catch/15825235/ujbr95d/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }).catch(() => {});
+        renderSystem('\u2713 Feedback sent — thanks! We read every one.');
+        return true;
+      }
+
+      case 'update': {
+        const { execSync } = require('child_process');
+        renderSystem('Updating Vennie...');
+        try {
+          execSync('npm install -g vennie@latest', { timeout: 60000, stdio: 'pipe' });
+          const newVer = execSync('npm info vennie version', { encoding: 'utf8' }).trim();
+          renderSystem(`\u2713 Updated to v${newVer}. Restart Vennie to use the new version.`);
+        } catch (err) {
+          renderSystem(`Update failed: ${err.message}\nTry running manually: npm install -g vennie@latest`);
         }
         return true;
       }

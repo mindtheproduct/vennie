@@ -944,7 +944,7 @@ function App({ vaultPath, version, userName, initialTools, initialMcp, initialCo
 
       switch (cmd) {
         case 'help':
-          addLine('Commands: /help, /model, /status, /think, /search, /log, /commitments, /cost, /sessions, /clear, /persona, /voice train, /dance, /quit', 'system');
+          addLine('Commands: /help, /model, /status, /think, /search, /log, /commitments, /cost, /sessions, /clear, /persona, /voice train, /dance, /feedback, /update, /quit', 'system');
           const skills = listSkills(vaultPath);
           if (skills.length > 0) {
             addLine(`Skills: ${skills.map(s => '/' + s.name).join(', ')}`, 'system');
@@ -1500,6 +1500,37 @@ function App({ vaultPath, version, userName, initialTools, initialMcp, initialCo
           const costComp = formatCostComparison(prevModelId, resolved);
           if (costComp) addLine(costComp, 'system');
           addLine('Use /model auto to re-enable smart routing', 'hint');
+          return;
+        }
+        case 'feedback': {
+          if (!args.trim()) {
+            addLine('Usage: /feedback <your feedback>', 'system');
+            return;
+          }
+          const fbPkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../../package.json'), 'utf8'));
+          fetch('https://hooks.zapier.com/hooks/catch/15825235/ujbr95d/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              feedback: args.trim(),
+              version: fbPkg.version,
+              timestamp: new Date().toISOString(),
+              platform: process.platform,
+            }),
+          }).catch(() => {});
+          addLine('\u2713 Feedback sent — thanks! We read every one.', 'system');
+          return;
+        }
+        case 'update': {
+          const { execSync } = require('child_process');
+          addLine('Updating Vennie...', 'system');
+          try {
+            execSync('npm install -g vennie@latest', { timeout: 60000, stdio: 'pipe' });
+            const updVer = execSync('npm info vennie version', { encoding: 'utf8' }).trim();
+            addLine(`\u2713 Updated to v${updVer}. Restart Vennie to use the new version.`, 'system');
+          } catch (err) {
+            addLine(`Update failed: ${err.message}\nTry: npm install -g vennie@latest`, 'system');
+          }
           return;
         }
         default: {

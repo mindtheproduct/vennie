@@ -703,6 +703,8 @@ function renderHelp(skills) {
     ['/persona [name]', 'Switch persona (or /persona off)'],
     ['/voice train', 'Train Vennie on your writing style'],
     ['/news', "Today's product signal"],
+    ['/feedback <text>', 'Send feedback to the Vennie team'],
+    ['/update', 'Update Vennie to the latest version'],
     ['/quit', 'Exit Vennie'],
   ];
 
