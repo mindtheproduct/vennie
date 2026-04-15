@@ -1,6 +1,6 @@
 {
   "name": "vennie",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Your AI product operating system — by Mind the Product",
   "main": "src/desktop/main/index.js",
   "bin": {

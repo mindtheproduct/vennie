@@ -782,7 +782,7 @@ function handleSlashCommand(trimmed, sender) {
 
   switch (cmd) {
     case 'help':
-      return { handled: true, type: 'system', text: 'Commands: /help, /model, /status, /think, /search, /log, /cost, /clear, /persona, /gym, /patterns, /who, /radar, /career, /brief, /simulate, /shipped, /challenge, /quit' };
+      return { handled: true, type: 'system', text: 'Commands: /help, /model, /status, /think, /search, /log, /cost, /clear, /persona, /gym, /patterns, /who, /radar, /career, /brief, /simulate, /shipped, /challenge, /feedback, /quit' };
 
     case 'cost':
       return { handled: true, type: 'system', text: `Input: ${costRef.input.toLocaleString()} tokens | Output: ${costRef.output.toLocaleString()} tokens | Cost: $${costRef.cost.toFixed(4)}` };
@@ -978,6 +978,24 @@ function handleSlashCommand(trimmed, sender) {
       }
     }
 
+    case 'feedback': {
+      if (!args.trim()) return { handled: true, type: 'system', text: 'Usage: /feedback <your feedback>\nTell us what you love, what\'s broken, or what you wish Vennie could do.' };
+      const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../../../package.json'), 'utf8'));
+      const payload = {
+        feedback: args.trim(),
+        version: pkg.version,
+        timestamp: new Date().toISOString(),
+        platform: process.platform,
+      };
+      const WEBHOOK_URL = 'https://hooks.zapier.com/hooks/catch/15825235/ujbr95d/';
+      fetch(WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).catch(() => {}); // fire and forget
+      return { handled: true, type: 'system', text: '\u2713 Feedback sent — thanks! We read every one.' };
+    }
+
     default: {
       // Try loading as a skill
       const skill = loadSkill(vaultPath, cmd);
@@ -1013,6 +1031,7 @@ function getBuiltInCommands() {
     { name: 'shipped', description: 'Capture a shipment for career evidence' },
     { name: 'career', description: 'Career timeline and skill matrix' },
     { name: 'challenge', description: 'Adversarial analysis' },
+    { name: 'feedback', description: 'Send feedback to the Vennie team' },
     { name: 'cost', description: 'Show session cost' },
     { name: 'clear', description: 'Clear conversation' },
   ];
