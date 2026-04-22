@@ -16,8 +16,14 @@
     "desktop:build:win": "vite build && electron-builder --win",
     "desktop:build:linux": "vite build && electron-builder --linux",
     "vite:build": "vite build",
+    "test": "jest",
+    "test:watch": "jest --watch",
     "install-deps": "pip install mcp pyyaml",
     "postinstall": "node bin/postinstall.js"
+  },
+  "jest": {
+    "testMatch": ["**/tests/**/*.test.js"],
+    "testEnvironment": "node"
   },
   "files": [
     "bin/",
@@ -89,6 +95,7 @@
     "electron": "^33.0.0",
     "electron-builder": "^25.0.0",
     "framer-motion": "^12.38.0",
+    "jest": "^30.3.0",
     "lucide-react": "^1.8.0",
     "postcss": "^8.5.9",
     "react-dom": "^18.3.1",
