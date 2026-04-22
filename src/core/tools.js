@@ -381,7 +381,11 @@ const executors = {
 async function executeTool(name, input, context) {
   // Check built-in tools first
   if (executors[name]) {
-    return executors[name](input, context);
+    try {
+      return await executors[name](input, context);
+    } catch (err) {
+      return { error: err.message };
+    }
   }
 
   // Check MCP tools (prefixed with mcp__)
@@ -395,11 +399,21 @@ async function executeTool(name, input, context) {
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
- * Resolve a tool path — if relative, resolve against vault root.
+ * Resolve a tool path and assert it stays within the vault.
+ * Throws if the resolved path escapes the vault root — covers both
+ * absolute paths outside the vault and relative traversal (../../).
  */
 function resolveToolPath(filePath, vaultPath) {
-  if (path.isAbsolute(filePath)) return filePath;
-  return path.resolve(vaultPath, filePath);
+  const resolved = path.isAbsolute(filePath)
+    ? path.normalize(filePath)
+    : path.resolve(vaultPath, filePath);
+
+  // path.sep suffix prevents /vault prefix-matching /vault-other
+  const canonicalVault = path.resolve(vaultPath) + path.sep;
+  if (!resolved.startsWith(canonicalVault)) {
+    throw new Error(`Access denied: path is outside the vault — ${resolved}`);
+  }
+  return resolved;
 }
 
 // ── Exports ─────────────────────────────────────────────────────────────────
